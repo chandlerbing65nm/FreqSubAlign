@@ -1,0 +1,607 @@
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/condabin/conda
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/bin/conda
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/bin/conda-env
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/bin/activate
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/bin/deactivate
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/etc/profile.d/conda.sh
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/etc/fish/conf.d/conda.fish
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/shell/condabin/Conda.psm1
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/shell/condabin/conda-hook.ps1
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/lib/python3.12/site-packages/xontrib/conda.xsh
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/etc/profile.d/conda.csh
+no change     /users/doloriel/.bashrc
+No action taken.
+
+CondaError: Run 'conda init' before 'conda activate'
+
+2025-05-27 20:44:21,442 - 10 - main_eval.py - eval - arch tanet
+2025-05-27 20:44:21,444 - 10 - main_eval.py - eval - baseline source
+2025-05-27 20:44:21,444 - 10 - main_eval.py - eval - batch_size 8
+2025-05-27 20:44:21,444 - 10 - main_eval.py - eval - before_norm False
+2025-05-27 20:44:21,444 - 10 - main_eval.py - eval - chosen_blocks ['layer3', 'layer4']
+2025-05-27 20:44:21,444 - 10 - main_eval.py - eval - clip_length 16
+2025-05-27 20:44:21,444 - 10 - main_eval.py - eval - compute_stat False
+2025-05-27 20:44:21,444 - 10 - main_eval.py - eval - corruptions gauss_shuffled
+2025-05-27 20:44:21,444 - 10 - main_eval.py - eval - dataset ucf101
+2025-05-27 20:44:21,444 - 10 - main_eval.py - eval - datatype vid
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - debug False
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - drop_path_rate 0.2
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - evaluate_baselines False
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - fix_BNS True
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - flip_ratio 0
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - frame_interval 2
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - frame_uniform True
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - full_res False
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - gpus [0]
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - if_pred_consistency True
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - if_sample_tta_aug_views True
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - if_spatial_rand_cropping True
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - if_tta_standard tta_online
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - img_feature_dim 256
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - img_norm_cfg {'mean': [123.675, 116.28, 103.53], 'std': [58.395, 57.12, 57.375], 'to_bgr': False}
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - input_mean [0.485, 0.456, 0.406]
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - input_size 224
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - input_std [0.229, 0.224, 0.225]
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - lambda_feature_reg 1
+2025-05-27 20:44:21,445 - 10 - main_eval.py - eval - lambda_pred_consis 0.1
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - loss_type nll
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - lr 5e-05
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - modality RGB
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - model_path /scratch/project_465001897/datasets/ucf/model_tanet_ucf/tanet_ucf.pth.tar
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - momentum 0.9
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - momentum_bns 0.1
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - momentum_mvg 0.1
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - moving_avg True
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - n_augmented_views 2
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - n_epoch_adapat 1
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - n_gradient_steps 1
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - norm False
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - num_clips 1
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - partial_bn False
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - patch_size (2, 4, 4)
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - print_freq 20
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - reduce_dim True
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - reg_type l1_loss
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - result_dir /scratch/project_465001897/datasets/ucf/results/tanet_ucf101/tta_gauss_shuffled
+2025-05-27 20:44:21,446 - 10 - main_eval.py - eval - root_path None
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - running_manner True
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - sample_style uniform-1
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - scale_size 256
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - spatiotemp_mean_clean_file /scratch/project_465001897/datasets/ucf/source_statistics_tanet_ucf/list_spatiotemp_mean_20220908_235138.npy
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - spatiotemp_var_clean_file /scratch/project_465001897/datasets/ucf/source_statistics_tanet_ucf/list_spatiotemp_var_20220908_235138.npy
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - stat_reg mean_var
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - stat_type ['spatiotemp']
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - test_crops 1
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - tta True
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - tta_view_sample_style_list ['uniform_equidist']
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - update_only_bn_affine False
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - use_pretrained False
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - use_src_stat_in_reg True
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - val_vid_list /scratch/project_465001897/datasets/ucf/list_video_perturbations_ucf/gauss_shuffled.txt
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - verbose True
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - vid_format 
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - video_data_dir /scratch/project_465001897/datasets/ucf/val_corruptions
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - weight_decay 0.0005
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - window_size (8, 7, 7)
+2025-05-27 20:44:21,447 - 10 - main_eval.py - eval - workers 4
+/scratch/project_465001389/chandler_scratch/miniconda3/envs/videotta/lib/python3.8/site-packages/torchvision/models/_utils.py:135: UserWarning: Using 'weights' as positional parameter(s) is deprecated since 0.13 and may be removed in the future. Please use keyword parameter(s) instead.
+  warnings.warn(
+/scratch/project_465001389/chandler_scratch/miniconda3/envs/videotta/lib/python3.8/site-packages/torchvision/models/_utils.py:223: UserWarning: Arguments other than a weight enum or `None` for 'weights' are deprecated since 0.13 and may be removed in the future. The current behavior is equivalent to passing `weights=ResNet50_Weights.IMAGENET1K_V1`. You can also use `weights=ResNet50_Weights.DEFAULT` to get the most up-to-date weights.
+  warnings.warn(msg)
+2025-05-27 20:44:29,618 - 10 - main_eval.py - eval - Loading /scratch/project_465001897/datasets/ucf/model_tanet_ucf/tanet_ucf.pth.tar
+2025-05-27 20:44:29,739 - 10 - utils_.py - model_analysis - #################################################
+2025-05-27 20:44:29,739 - 10 - utils_.py - model_analysis - Number of trainable parameters: 24985093
+2025-05-27 20:44:29,739 - 10 - utils_.py - model_analysis - #################################################
+apex is not installed
+####Starting Evaluation for ::: gauss_shuffled corruption####
+
+                   Initializing TSN with base model: resnet50.
+                   TSN Configurations:
+                   input_modality:     RGB
+                   num_segments:       16
+                   new_length:         1
+                   consensus_module:   avg
+                   dropout_ratio:      0.8
+                   img_feature_dim:    256
+                   
+=> base model: resnet50
+Adding temporal adaptive moduel...
+=> Processing this stage with 3 blocks residual
+TAM with kernel_size 3.
+TAM with kernel_size 3.
+TAM with kernel_size 3.
+=> Processing this stage with 4 blocks residual
+TAM with kernel_size 3.
+TAM with kernel_size 3.
+TAM with kernel_size 3.
+TAM with kernel_size 3.
+=> Processing this stage with 6 blocks residual
+TAM with kernel_size 3.
+TAM with kernel_size 3.
+TAM with kernel_size 3.
+TAM with kernel_size 3.
+TAM with kernel_size 3.
+TAM with kernel_size 3.
+=> Processing this stage with 3 blocks residual
+TAM with kernel_size 3.
+TAM with kernel_size 3.
+TAM with kernel_size 3.
+model epoch 50 best prec@1: 96.80147933657447
+Model Structure
+DataParallel(
+  (module): TSN(
+    (base_model): ResNet(
+      (conv1): Conv2d(3, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+      (bn1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (relu): ReLU(inplace=True)
+      (maxpool): MaxPool2d(kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False)
+      (layer1): Sequential(
+        (0): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(64, 64, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(64, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (downsample): Sequential(
+              (0): Conv2d(64, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+              (1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            )
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(64, 16, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(16, 64, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+        (1): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(256, 64, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(64, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(64, 16, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(16, 64, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+        (2): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(256, 64, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(64, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(64, 16, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(16, 64, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+      )
+      (layer2): Sequential(
+        (0): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(256, 128, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(128, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (downsample): Sequential(
+              (0): Conv2d(256, 512, kernel_size=(1, 1), stride=(2, 2), bias=False)
+              (1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            )
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(128, 32, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(32, 128, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+        (1): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(512, 128, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(128, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(128, 32, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(32, 128, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+        (2): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(512, 128, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(128, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(128, 32, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(32, 128, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+        (3): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(512, 128, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(128, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(128, 32, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(32, 128, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+      )
+      (layer3): Sequential(
+        (0): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(512, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(256, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (downsample): Sequential(
+              (0): Conv2d(512, 1024, kernel_size=(1, 1), stride=(2, 2), bias=False)
+              (1): BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            )
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(256, 64, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(64, 256, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+        (1): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(1024, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(256, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(256, 64, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(64, 256, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+        (2): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(1024, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(256, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(256, 64, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(64, 256, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+        (3): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(1024, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(256, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(256, 64, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(64, 256, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+        (4): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(1024, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(256, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(256, 64, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(64, 256, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+        (5): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(1024, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(256, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(256, 64, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(64, 256, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+      )
+      (layer4): Sequential(
+        (0): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(1024, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(512, 512, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(512, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(2048, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (downsample): Sequential(
+              (0): Conv2d(1024, 2048, kernel_size=(1, 1), stride=(2, 2), bias=False)
+              (1): BatchNorm2d(2048, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            )
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(512, 128, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(128, 512, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+        (1): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(2048, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(512, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(2048, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(512, 128, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(128, 512, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+        (2): TemporalBottleneck(
+          (net): Bottleneck(
+            (conv1): Conv2d(2048, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv2): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (conv3): Conv2d(512, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): BatchNorm2d(2048, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+          )
+          (tam): TAM(
+            (G): Sequential(
+              (0): Linear(in_features=16, out_features=32, bias=False)
+              (1): BatchNorm1d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Linear(in_features=32, out_features=3, bias=False)
+              (4): Softmax(dim=-1)
+            )
+            (L): Sequential(
+              (0): Conv1d(512, 128, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+              (1): BatchNorm1d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+              (3): Conv1d(128, 512, kernel_size=(1,), stride=(1,), bias=False)
+              (4): Sigmoid()
+            )
+          )
+        )
+      )
+      (avgpool): AdaptiveAvgPool2d(output_size=1)
+      (fc): Dropout(p=0.8, inplace=False)
+    )
+    (new_fc): Linear(in_features=2048, out_features=101, bias=True)
+    (consensus): ConsensusModule()
+  )
+)
+2025-05-27 20:44:41,596 - 10 - basics.py - tta_standard - TTA Epoch1: [0/473]	Time 11.784 (11.784)	Loss reg 13.2129 (13.2129)	Loss consis 3.8474 (3.8474)	Prec@1 37.500 (37.500)	Prec@5 50.000 (50.000)
+2025-05-27 20:44:43,480 - 10 - basics.py - tta_standard - TTA Epoch1: [1/473]	Time 1.884 (6.834)	Loss reg 12.1681 (12.6905)	Loss consis 3.9317 (3.8895)	Prec@1 37.500 (37.500)	Prec@5 50.000 (50.000)
+2025-05-27 20:44:45,318 - 10 - basics.py - tta_standard - TTA Epoch1: [2/473]	Time 1.837 (5.169)	Loss reg 11.2968 (12.2259)	Loss consis 4.5444 (4.1078)	Prec@1 12.500 (29.167)	Prec@5 25.000 (41.667)
+2025-05-27 20:44:47,155 - 10 - basics.py - tta_standard - TTA Epoch1: [3/473]	Time 1.838 (4.336)	Loss reg 10.5134 (11.7978)	Loss consis 2.4890 (3.7031)	Prec@1 12.500 (25.000)	Prec@5 62.500 (46.875)
+2025-05-27 20:44:48,992 - 10 - basics.py - tta_standard - TTA Epoch1: [4/473]	Time 1.837 (3.836)	Loss reg 9.8123 (11.4007)	Loss consis 3.6186 (3.6862)	Prec@1 0.000 (20.000)	Prec@5 25.000 (42.500)
+2025-05-27 20:44:50,828 - 10 - basics.py - tta_standard - TTA Epoch1: [5/473]	Time 1.835 (3.503)	Loss reg 9.2227 (11.0377)	Loss consis 4.8006 (3.8720)	Prec@1 0.000 (16.667)	Prec@5 25.000 (39.583)
+2025-05-27 20:44:52,663 - 10 - basics.py - tta_standard - TTA Epoch1: [6/473]	Time 1.835 (3.264)	Loss reg 8.7096 (10.7051)	Loss consis 4.5627 (3.9706)	Prec@1 12.500 (16.071)	Prec@5 50.000 (41.071)

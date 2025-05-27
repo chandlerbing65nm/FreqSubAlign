@@ -30,9 +30,6 @@ from baselines.t3a import get_cls_ext, t3a_forward_and_adapt
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# def compute_temp_statistics(args = None,):
-
-
 
 
 def eval(args=None, model = None ):
@@ -57,27 +54,20 @@ def eval(args=None, model = None ):
     args.num_classes = num_classes
 
     if model is None:
-        # Initialize the model if not provided
+        # todo  initialize the model if the model is not provided
         model = get_model(args, num_classes, logger)
-        # Load model weights with proper device mapping
-        checkpoint = torch.load(args.model_path, map_location=device)
+        # todo  load model weights
+        checkpoint = torch.load(args.model_path)
         logger.debug(f'Loading {args.model_path}')
         if args.arch == 'tanet':
             print("model epoch {} best prec@1: {}".format(checkpoint['epoch'], checkpoint['best_prec1']))
 
-        # Move model to device before loading state dict
-        model = model.to(device)
-        
-        # Remove Apex-related state dict entries
-        if 'amp' in checkpoint:
-            del checkpoint['amp']
-        
         if 'module.' in list(checkpoint['state_dict'].keys())[0]:
-            model = torch.nn.DataParallel(model)
+            model = torch.nn.DataParallel(model, device_ids=args.gpus).to(device)
             model.load_state_dict(checkpoint['state_dict'])
         else:
             model.load_state_dict(checkpoint['state_dict'])
-            model = torch.nn.DataParallel(model)
+            model = torch.nn.DataParallel(model, device_ids=args.gpus).to(device)
     if args.verbose:
         model_analysis(model, logger)
 
@@ -95,7 +85,6 @@ def eval(args=None, model = None ):
         criterion = torch.nn.CrossEntropyLoss().to(device)
     else:
         raise ValueError("Unknown loss type")
-    
     if args.tta:
         # TTA
         writer = SummaryWriter(log_dir=osp.join(args.result_dir, f'{log_time}_tb'))
@@ -246,4 +235,3 @@ def eval(args=None, model = None ):
     logger.handlers.clear()
     # todo return the adapted model,  if no adaptation, returned model is None
     return epoch_result_list, model
-

@@ -60,7 +60,7 @@ parser.add_argument('--drop_path_rate',  default=0.2)
 
 # ========================= Runtime Configs ==========================
 parser.add_argument('--gpus', nargs='+', type=int, default=None)
-parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('--norm', action='store_true')
 parser.add_argument('--debug', action='store_true', help='if debug, loading only the first 50 videos in the list')

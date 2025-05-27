@@ -2,10 +2,10 @@ import torch
 import torch.nn as nn
 from utils.utils_ import AverageMeter, AverageMeterTensor, MovingAverageTensor
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 l1_loss = nn.L1Loss(reduction='mean')
 mse_loss = nn.MSELoss(reduction='mean')
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def compute_kld(mean_true, mean_pred, var_true, var_pred):
     # mean1 and std1 are for true distribution
@@ -136,13 +136,8 @@ class CombineNormStatsRegHook_onereg():
         # self.source_mean_spatial, self.source_var_spatial = spatial_stats_clean_tuple
         self.source_mean_spatiotemp, self.source_var_spatiotemp = spatiotemp_stats_clean_tuple
 
-        # if self.source_mean_temp is not None:
-        #     self.source_mean_temp, self.source_var_temp = torch.tensor( self.source_mean_temp).cuda(), torch.tensor(self.source_var_temp).cuda()
-        # if self.source_mean_spatial is not None:  # todo for BatchNorm1d layer,  there are no spatial or spatiotemporal statistics
-        #     self.source_mean_spatial, self.source_var_spatial = torch.tensor( self.source_mean_spatial).cuda(), torch.tensor(self.source_var_spatial).cuda()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         if self.source_mean_spatiotemp is not None:
-            # self.source_mean_spatiotemp, self.source_var_spatiotemp = torch.tensor( self.source_mean_spatiotemp).cuda(), torch.tensor(self.source_var_spatiotemp).cuda()
             self.source_mean_spatiotemp, self.source_var_spatiotemp = torch.tensor( self.source_mean_spatiotemp).to(self.device), torch.tensor(self.source_var_spatiotemp).to(self.device)
 
         if self.moving_avg:
@@ -154,7 +149,7 @@ class CombineNormStatsRegHook_onereg():
 
     def hook_fn(self, module, input, output):
         feature = input[0] if self.before_norm else output
-        # self.r_feature = torch.tensor(0).float().cuda()
+       
         self.r_feature = torch.tensor(0).float().to(self.device)
 
         if isinstance(module, nn.BatchNorm1d): # todo  on BatchNorm1d, only temporal statistics regularization
@@ -420,10 +415,8 @@ class CombineNormStatsRegHook():
                 nm, t, h, w, c = feature.size()
                 m = self.n_augmented_views
                 bz = nm // m
-                feature = feature.permute(0, 4, 1, 2, 3).contiguous() # nm, t, h, w, c -> nm, c,  t, h, w,
-                # feature = feature.view(bz, m, t, h, w, c).permute(0, 1, 5, 2,3,4).contiguous()
-                # self.compute_reg_for_NMCTHW(feature)
-                self.compute_reg_for_NCTHW(feature)
+                feature = feature.view(bz, m, t, h, w, c).permute(0, 1, 5, 2,3,4).contiguous()
+                self.compute_reg_for_NMCTHW(feature)
             else:
                 assert len(feature.size()) == 5
                 bz, t, h, w, c = feature.size()
@@ -533,7 +526,10 @@ class CombineNormStatsRegHook():
 
 
 def compute_regularization(mean_true, mean_pred, var_true, var_pred, reg_type):
+    # device = torch.device("cuda:0")
+    # mean_true = mean_true.to(device)
     mean_pred = mean_pred.to(mean_true.device)
+    # var_true = var_true.to(device)
     var_pred = var_pred.to(var_true.device)
     if reg_type == 'mse_loss':
         return mse_loss(var_true, var_pred) + mse_loss(mean_true, mean_pred)

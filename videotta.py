@@ -77,15 +77,6 @@ if __name__ == '__main__':
     for key, value in model_config['additional_args'].items():
         setattr(args, key, value)
 
-    # Create parent results directory
-    parent_result_dir = f'/scratch/project_465001897/datasets/ucf/results/{args.arch}_{args.dataset}'
-    os.makedirs(parent_result_dir, exist_ok=True)
-    
-    # Create a single results file for all corruptions
-    f_write = get_writer_to_all_result(args, custom_path=parent_result_dir)
-    f_write.write('Corruption Results:\n')
-    f_write.write('#############################\n')
-
     for corr_id, args.corruptions in enumerate(corruptions):
         print(f'####Starting Evaluation for ::: {args.corruptions} corruption####')
         args.val_vid_list = f'/scratch/project_465001897/datasets/ucf/list_video_perturbations_ucf/{args.corruptions}.txt'
@@ -93,9 +84,10 @@ if __name__ == '__main__':
 
         epoch_result_list, _ = eval(args=args)
 
-        # Write corruption name and results
-        f_write.write(f'\n{args.corruptions}:\n')
+        if corr_id == 0:
+            f_write = get_writer_to_all_result(args)
         f_write.write(' '.join([str(round(float(xx), 3)) for xx in epoch_result_list]) + '\n')
-        f_write.flush()
 
-    f_write.close() 
+        f_write.flush()
+        if corr_id == len(corruptions) - 1:
+            f_write.close() 

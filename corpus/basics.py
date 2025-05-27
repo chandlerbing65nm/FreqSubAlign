@@ -102,42 +102,119 @@ def validate(val_loader, model, criterion, iter, epoch=None, args=None, logger=N
     top5 = AverageMeter()
 
     # switch to evaluate mode
-    model.eval()
+
+    pred_concat = []
+    gt_concat = []
+    if args.arch == 'tanet':
+        n_clips = int(args.sample_style.split("-")[-1])
+    elif args.arch == 'videoswintransformer':
+        n_clips = args.num_clips
+
+    if args.evaluate_baselines:
+        if args.baseline == 'source':
+            logger.debug(f'Starting ---- {args.corruptions} ---- evaluation for Source...')
+        elif args.baseline == 'tent':
+            from baselines.tent import forward_and_adapt
+            logger.debug(f'Starting ---- {args.corruptions} ---- adaptation for TENT...')
+            for i, (input, target) in enumerate(val_loader):
+                actual_bz = input.shape[0]
+                input = input.to(device)
+                if args.arch == 'tanet':
+                    input = input.view(-1, 3, input.size(2), input.size(3))
+                    input = input.view(actual_bz * args.test_crops * n_clips,
+                                       args.clip_length, 3, input.size(2), input.size(3))
+                    _ = forward_and_adapt(input, model, optimizer, args, actual_bz, n_clips)
+                else:
+                    input = input.reshape((-1,) + input.shape[2:])
+                    _ = forward_and_adapt(input, model, optimizer)
+            logger.debug(f'TENT Adaptation Finished --- Now Evaluating')
+        elif args.baseline == 'norm':
+            logger.debug(f'Starting ---- {args.corruptions} ---- adaptation for NORM...')
+            with torch.no_grad():
+                for i, (input, target) in enumerate(val_loader):
+                    actual_bz = input.shape[0]
+                    input = input.to(device)
+                    if args.arch == 'tanet':
+                        input = input.view(-1, 3, input.size(2), input.size(3))
+                        input = input.view(actual_bz * args.test_crops * n_clips,
+                                           args.clip_length, 3, input.size(2), input.size(3))
+                        _ = model(input)
+                    else:
+                        input = input.reshape((-1,) + input.shape[2:])
+                        _ = model(input)
+            logger.debug(f'NORM Adaptation Finished --- Now Evaluating')
+        elif args.baseline == 'shot':
+            logger.debug(f'Starting ---- {args.corruptions} ---- evaluation for SHOT...')
+        elif args.baseline == 'dua':
+            logger.debug(f'Starting ---- {args.corruptions} ---- evaluation for DUA...')
 
     with torch.no_grad():
         end = time.time()
-        for i, (input, target) in enumerate(val_loader):
+        for i, (input, target) in enumerate(val_loader):  #
+            model.eval()
+            actual_bz = input.shape[0]
             input = input.to(device)
             target = target.to(device)
+            if args.arch == 'tanet':
+                # (actual_bz,    C* spatial_crops * temporal_clips* clip_len, 256, 256) ->   (actual_bz * spatial_crops * temporal_clips* clip_len,  C, 256, 256)
+                input = input.view(-1, 3, input.size(2), input.size(3))
+                input = input.view(actual_bz * args.test_crops * n_clips,
+                                       args.clip_length, 3, input.size(2),input.size(3))  # (actual_bz * spatial_crops * temporal_clips* clip_len,  C, 256, 256) -> (actual_bz * spatial_crops * temporal_clips,  clip_len,  C, 256, 256)
 
-            # compute output
-            output = model(input)
+                output = model(input) #  (actual_bz * spatial_crops * temporal_clips,         clip_len,  C, 256, 256)   ->     (actual_bz * spatial_crops * temporal_clips,       n_class )
+                # take the average among all spatial_crops * temporal_clips,   (actual_bz * spatial_crops * temporal_clips,       n_class )  ->   (actual_bz,       n_class )
+                output = output.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
+            elif args.arch == 'videoswintransformer':
+                # the format shape is N C T H W
+                # (actual_bz,   C* spatial_crops * temporal_clips* clip_len,    256,     256)   -> (batch, n_views, C, T, H, W)
+                n_views = args.test_crops * n_clips
+                # input = input.view(-1, n_views, 3, args.clip_length, input.size(3), input.size(4))
+                output, _ = model(  input)  # (batch, n_views, C, T, H, W) ->  (batch, n_class), todo outputs are unnormalized scores
+
+
+
+            else:
+                input = input.reshape( (-1,) + input.shape[2:])  # (batch, n_views, 3, T, 224,224 ) -> (batch * n_views, 3, T, 224,224 )
+                output = model( input)  # (batch * n_views, 3, T, 224,224 ) ->  (batch * n_views,  n_class)  todo  reshape clip prediction into video prediction
+
+                output = torch.squeeze(output)
+                output = rearrange(output, '(d0 d1) d2 -> d0 d1 d2', d0=actual_bz)  # (batch * n_views,  n_class) ->  (batch, n_views,  n_class)  todo  reshape clip prediction into video prediction
+                output = torch.mean(output, dim=1)  # (batch, n_views,  n_class) ->  (batch,  n_class), take the average scores of multiple views
+
             loss = criterion(output, target)
 
             # measure accuracy and record loss
             prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
-            losses.update(loss.item(), input.size(0))
-            top1.update(prec1.item(), input.size(0))
-            top5.update(prec5.item(), input.size(0))
+            _, preds = torch.max(output, 1)
+            # pred_concat = np.concatenate([pred_concat, preds.detach().cpu().numpy()])
+            # gt_concat = np.concatenate([gt_concat, target.detach().cpu().numpy()])
+
+            losses.update(loss.item(), actual_bz)
+            top1.update(prec1.item(), actual_bz)
+            top5.update(prec5.item(), actual_bz)
 
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if i % args.print_freq == 0:
-                logger.debug(('Test: [{0}/{1}]\t'
-                              'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                              'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                              'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                              'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
-                    i, len(val_loader), batch_time=batch_time, loss=losses,
-                    top1=top1, top5=top5)))
+            if args.verbose:
+                if i % args.print_freq == 0:
+                    logger.debug(('Test: [{0}/{1}]\t'
+                                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                                  'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
+                                  'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+                        i, len(val_loader), batch_time=batch_time, loss=losses, top1=top1, top5=top5)))
 
-    logger.debug(('Testing Results: Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} Loss {loss.avg:.5f}'
-                  .format(top1=top1, top5=top5, loss=losses)))
+    logger.debug(('Testing Results: Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} Loss {loss.avg:.5f}'.format(top1=top1,
+                                                                                                            top5=top5,
+                                                                                                            loss=losses)))
     if writer is not None:
         writer.add_scalars('loss', {'val_loss': losses.avg}, global_step=epoch)
         writer.add_scalars('acc', {'val_acc': top1.avg}, global_step=epoch)
+    logger.debug(f'Validation acc {top1.avg} ')
+
+    # logger.debug(classification_report(pred_concat, gt_concat))
 
     return top1.avg
 
@@ -324,6 +401,7 @@ def compute_cos_similarity(model = None, args = None, log_time = None):
             list_cos_sim_mat[hook_id] = list_cos_sim_mat[hook_id].avg.cpu().numpy()
 
     np.save( osp.join(args.result_dir,  f'list_{args.stat_type}_relationmap_{log_time}.npy'), list_cos_sim_mat, allow_pickle=True)
+
 
 def tta_standard(model_origin, criterion, args=None, logger = None, writer =None):
     """
@@ -1008,6 +1086,7 @@ def test_time_adapt(model, criterion, args=None, logger=None, writer=None):
         epoch_result_list.append(top1_acc)
     return epoch_result_list, model
 
+
 def evaluate_baselines(model, args=None, logger=None, writer=None):
 
     tta_loader = torch.utils.data.DataLoader(
@@ -1024,7 +1103,6 @@ def evaluate_baselines(model, args=None, logger=None, writer=None):
     global_iter = 0
     validate_brief(eval_loader=eval_loader, model=model, global_iter=global_iter, args=args,
                    logger=logger, writer=writer)
-
 
 
 def validate_brief(eval_loader, model, global_iter, epoch=None, args=None, logger=None, writer=None):
@@ -1375,7 +1453,7 @@ def get_model(args, num_classes, logger):
     elif args.arch == 'i3d_incep':
         model = InceptionI3d(num_classes=400, in_channels=3)
         if args.use_pretrained:
-            model.load_state_dict(torch.load(args.pretrained_model, map_location=device))
+            model.load_state_dict(torch.load(args.pretrained_model))
             logger.debug(f'Loaded pretrained I3D Inception model {args.pretrained_model}')
         model.replace_logits(num_classes=num_classes)
     elif 'i3d_resnet' in args.arch:
@@ -1415,9 +1493,6 @@ def get_model(args, num_classes, logger):
         model = Recognizer3D(num_classes =  num_classes, patch_size= args.patch_size, window_size=args.window_size, drop_path_rate=args.drop_path_rate)
     else:
         raise Exception(f'{args.arch} is not a valid model!')
-    
-    # Move model to device
-    model = model.to(device)
     return model
 
 

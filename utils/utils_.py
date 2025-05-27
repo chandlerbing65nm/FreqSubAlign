@@ -6,7 +6,6 @@ import getpass
 import logging
 import numpy as np
 import torchvision
-import torch
 # import torchvision.transforms
 
 
@@ -114,8 +113,8 @@ def path_logger(result_dir, log_time):
 
 
 def model_analysis(model, logger):
-    # print("Model Structure")
-    # print(model)
+    print("Model Structure")
+    print(model)
 
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])

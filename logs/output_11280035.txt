@@ -1,0 +1,16 @@
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/condabin/conda
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/bin/conda
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/bin/conda-env
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/bin/activate
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/bin/deactivate
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/etc/profile.d/conda.sh
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/etc/fish/conf.d/conda.fish
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/shell/condabin/Conda.psm1
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/shell/condabin/conda-hook.ps1
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/lib/python3.12/site-packages/xontrib/conda.xsh
+no change     /scratch/project_465001389/chandler_scratch/miniconda3/etc/profile.d/conda.csh
+no change     /users/doloriel/.bashrc
+No action taken.
+
+CondaError: Run 'conda init' before 'conda activate'
+

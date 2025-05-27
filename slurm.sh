@@ -10,7 +10,7 @@
 #SBATCH --partition=small-g
 #SBATCH --time=24:00:00
 #SBATCH --account=project_465001897
-#SBATCH --output=/users/doloriel/work/Repo/ViTTA/logs/videotta_swin_ucf101.out
+#SBATCH --output=logs/output_%j.txt
 
 # Activate your virtual environment if needed
 conda init
