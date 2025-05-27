@@ -6,6 +6,7 @@ import os
 import os.path as osp
 from tensorboardX import SummaryWriter
 import torch.backends.cudnn as cudnn
+import torch
 # from datasets_.dataset import MyTSNDataset
 # from datasets_.video_dataset import MyTSNVideoDataset, MyVideoDataset
 
@@ -19,6 +20,8 @@ from utils.utils_ import  make_dir, path_logger, model_analysis, \
 # from utils.BNS_utils import BN3DFeatureHook, choose_BN_layers
 # import baselines.tent as tent
 from corpus.basics import train, validate,  get_dataset, get_model
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def main_train(args=None, best_prec1=0, ):
     log_time = time.strftime("%Y%m%d_%H%M%S")
@@ -53,7 +56,7 @@ def main_train(args=None, best_prec1=0, ):
         args.input_mean = [0.5]
         args.input_std = [np.mean(args.input_std)]
 
-    model = torch.nn.DataParallel(model, device_ids=args.gpus).cuda()
+    model = torch.nn.DataParallel(model, device_ids=args.gpus).to(device)
     # for k, v in model.named_parameters():
     #     print(k)
     # quit()
@@ -86,7 +89,7 @@ def main_train(args=None, best_prec1=0, ):
 
     # define loss function (criterion) and optimizer
     if args.loss_type == 'nll':
-        criterion = torch.nn.CrossEntropyLoss().cuda()
+        criterion = torch.nn.CrossEntropyLoss().to(device)
     else:
         raise ValueError("Unknown loss type")
 

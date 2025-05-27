@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from utils.utils_ import AverageMeter, AverageMeterTensor, MovingAverageTensor
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 l1_loss = nn.L1Loss(reduction='mean')
 mse_loss = nn.MSELoss(reduction='mean')
 
@@ -138,7 +140,7 @@ class CombineNormStatsRegHook_onereg():
         #     self.source_mean_temp, self.source_var_temp = torch.tensor( self.source_mean_temp).cuda(), torch.tensor(self.source_var_temp).cuda()
         # if self.source_mean_spatial is not None:  # todo for BatchNorm1d layer,  there are no spatial or spatiotemporal statistics
         #     self.source_mean_spatial, self.source_var_spatial = torch.tensor( self.source_mean_spatial).cuda(), torch.tensor(self.source_var_spatial).cuda()
-        self.device = torch.device("cuda:0")
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         if self.source_mean_spatiotemp is not None:
             # self.source_mean_spatiotemp, self.source_var_spatiotemp = torch.tensor( self.source_mean_spatiotemp).cuda(), torch.tensor(self.source_var_spatiotemp).cuda()
             self.source_mean_spatiotemp, self.source_var_spatiotemp = torch.tensor( self.source_mean_spatiotemp).to(self.device), torch.tensor(self.source_var_spatiotemp).to(self.device)
@@ -290,11 +292,11 @@ class CombineNormStatsRegHook():
         self.source_mean_spatiotemp, self.source_var_spatiotemp = spatiotemp_stats_clean_tuple
 
         if self.source_mean_temp is not None:
-            self.source_mean_temp, self.source_var_temp = torch.tensor( self.source_mean_temp).cuda(), torch.tensor(self.source_var_temp).cuda()
+            self.source_mean_temp, self.source_var_temp = torch.tensor( self.source_mean_temp).to(device), torch.tensor(self.source_var_temp).to(device)
         if self.source_mean_spatial is not None:  # todo for BatchNorm1d layer,  there are no spatial or spatiotemporal statistics
-            self.source_mean_spatial, self.source_var_spatial = torch.tensor( self.source_mean_spatial).cuda(), torch.tensor(self.source_var_spatial).cuda()
+            self.source_mean_spatial, self.source_var_spatial = torch.tensor( self.source_mean_spatial).to(device), torch.tensor(self.source_var_spatial).to(device)
         if self.source_mean_spatiotemp is not None:
-            self.source_mean_spatiotemp, self.source_var_spatiotemp = torch.tensor( self.source_mean_spatiotemp).cuda(), torch.tensor(self.source_var_spatiotemp).cuda()
+            self.source_mean_spatiotemp, self.source_var_spatiotemp = torch.tensor( self.source_mean_spatiotemp).to(device), torch.tensor(self.source_var_spatiotemp).to(device)
 
         if self.reduce_dim:
             if self.source_mean_temp is not None:
@@ -348,7 +350,7 @@ class CombineNormStatsRegHook():
 
     def hook_fn(self, module, input, output):
         feature = input[0] if self.before_norm else output
-        self.r_feature = torch.tensor(0).float().cuda()
+        self.r_feature = torch.tensor(0).float().to(device)
 
         if isinstance(module, nn.BatchNorm1d): # todo  on BatchNorm1d, only temporal statistics regularization
             # output is in shape (N, C, T)  or   (N*C, T )
@@ -418,8 +420,10 @@ class CombineNormStatsRegHook():
                 nm, t, h, w, c = feature.size()
                 m = self.n_augmented_views
                 bz = nm // m
-                feature = feature.view(bz, m, t, h, w, c).permute(0, 1, 5, 2,3,4).contiguous()
-                self.compute_reg_for_NMCTHW(feature)
+                feature = feature.permute(0, 4, 1, 2, 3).contiguous() # nm, t, h, w, c -> nm, c,  t, h, w,
+                # feature = feature.view(bz, m, t, h, w, c).permute(0, 1, 5, 2,3,4).contiguous()
+                # self.compute_reg_for_NMCTHW(feature)
+                self.compute_reg_for_NCTHW(feature)
             else:
                 assert len(feature.size()) == 5
                 bz, t, h, w, c = feature.size()
@@ -445,7 +449,7 @@ class CombineNormStatsRegHook():
                 for idx in range(self.n_augmented_views):
                     self.mean_avgmeter_spatiotemp_list[idx].update(batch_mean_spatiotemp[idx, :], n=bz)
                     self.var_avgmeter_spatiotemp_list[idx].update(batch_var_spatiotemp[idx, :], n= bz)
-            reg_sum = torch.tensor(0).float().cuda()
+            reg_sum = torch.tensor(0).float().to(device)
             for idx in range(self.n_augmented_views):
                 reg_sum = reg_sum + compute_regularization(self.source_mean_spatiotemp, self.mean_avgmeter_spatiotemp_list[idx].avg,
                                                                          self.source_var_spatiotemp, self.var_avgmeter_spatiotemp_list[idx].avg,  self.reg_type)
@@ -529,10 +533,7 @@ class CombineNormStatsRegHook():
 
 
 def compute_regularization(mean_true, mean_pred, var_true, var_pred, reg_type):
-    # device = torch.device("cuda:0")
-    # mean_true = mean_true.to(device)
     mean_pred = mean_pred.to(mean_true.device)
-    # var_true = var_true.to(device)
     var_pred = var_pred.to(var_true.device)
     if reg_type == 'mse_loss':
         return mse_loss(var_true, var_pred) + mse_loss(mean_true, mean_pred)
@@ -566,8 +567,8 @@ class NormStatsRegHook():
 
         self.source_mean, self.source_var = stats_clean_tuple
 
-        self.source_mean = torch.tensor(self.source_mean).cuda()
-        self.source_var = torch.tensor(self.source_var).cuda()
+        self.source_mean = torch.tensor(self.source_mean).to(device)
+        self.source_var = torch.tensor(self.source_var).to(device)
         if self.stat_type == 'temp':
             if self.reduce_dim and len(self.source_mean.size())==3 :
                 self.source_mean = self.source_mean.mean((1,2)) # (C, H, W) -> (C, )

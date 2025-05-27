@@ -1,14 +1,20 @@
-
-
-
 import time
 # import os
 from torch.nn.utils import clip_grad_norm
 import torch.nn as nn
 from einops import rearrange
-# import os.path as osp
-# from tensorboardX import SummaryWriter
-# import torch.backends.cudnn as cudnn
+import torch
+import torch.nn.parallel
+import torch.backends.cudnn as cudnn
+import torch.utils.data
+import torch.utils.data.distributed
+import torchvision.transforms
+import torchvision.datasets
+import torchvision.models
+import numpy as np
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 from datasets_.dataset_deprecated import MyTSNDataset
 from datasets_.video_dataset import MyTSNVideoDataset, MyVideoDataset
 
@@ -52,8 +58,11 @@ def train(train_loader, model, criterion, optimizer, epoch, args=None, logger=No
         # measure data loading time
         data_time.update(time.time() - end)
 
-        target = target.cuda()
-        output = model(input)  # (batch * n_views, 3, T, 224,224 ) ->  (batch * n_views, n_class)
+        target = target.to(device)
+        input = input.to(device)
+
+        # compute output
+        output = model(input)
         loss = criterion(output, target)
 
         # measure accuracy and record loss
@@ -64,14 +73,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args=None, logger=No
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
-
         loss.backward()
-
-        if args.clip_gradient is not None:
-            total_norm = clip_grad_norm(model.parameters(), args.clip_gradient)
-            if total_norm > args.clip_gradient:
-                logger.debug("clipping gradient: {} with coef {}".format(total_norm, args.clip_gradient / total_norm))
-
         optimizer.step()
 
         # measure elapsed time
@@ -100,119 +102,42 @@ def validate(val_loader, model, criterion, iter, epoch=None, args=None, logger=N
     top5 = AverageMeter()
 
     # switch to evaluate mode
-
-    pred_concat = []
-    gt_concat = []
-    if args.arch == 'tanet':
-        n_clips = int(args.sample_style.split("-")[-1])
-    elif args.arch == 'videoswintransformer':
-        n_clips = args.num_clips
-
-    if args.evaluate_baselines:
-        if args.baseline == 'source':
-            logger.debug(f'Starting ---- {args.corruptions} ---- evaluation for Source...')
-        elif args.baseline == 'tent':
-            from baselines.tent import forward_and_adapt
-            logger.debug(f'Starting ---- {args.corruptions} ---- adaptation for TENT...')
-            for i, (input, target) in enumerate(val_loader):
-                actual_bz = input.shape[0]
-                input = input.cuda()
-                if args.arch == 'tanet':
-                    input = input.view(-1, 3, input.size(2), input.size(3))
-                    input = input.view(actual_bz * args.test_crops * n_clips,
-                                       args.clip_length, 3, input.size(2), input.size(3))
-                    _ = forward_and_adapt(input, model, optimizer, args, actual_bz, n_clips)
-                else:
-                    input = input.reshape((-1,) + input.shape[2:])
-                    _ = forward_and_adapt(input, model, optimizer)
-            logger.debug(f'TENT Adaptation Finished --- Now Evaluating')
-        elif args.baseline == 'norm':
-            logger.debug(f'Starting ---- {args.corruptions} ---- adaptation for NORM...')
-            with torch.no_grad():
-                for i, (input, target) in enumerate(val_loader):
-                    actual_bz = input.shape[0]
-                    input = input.cuda()
-                    if args.arch == 'tanet':
-                        input = input.view(-1, 3, input.size(2), input.size(3))
-                        input = input.view(actual_bz * args.test_crops * n_clips,
-                                           args.clip_length, 3, input.size(2), input.size(3))
-                        _ = model(input)
-                    else:
-                        input = input.reshape((-1,) + input.shape[2:])
-                        _ = model(input)
-            logger.debug(f'NORM Adaptation Finished --- Now Evaluating')
-        elif args.baseline == 'shot':
-            logger.debug(f'Starting ---- {args.corruptions} ---- evaluation for SHOT...')
-        elif args.baseline == 'dua':
-            logger.debug(f'Starting ---- {args.corruptions} ---- evaluation for DUA...')
+    model.eval()
 
     with torch.no_grad():
         end = time.time()
-        for i, (input, target) in enumerate(val_loader):  #
-            model.eval()
-            actual_bz = input.shape[0]
-            input = input.cuda()
-            target = target.cuda()
-            if args.arch == 'tanet':
-                # (actual_bz,    C* spatial_crops * temporal_clips* clip_len, 256, 256) ->   (actual_bz * spatial_crops * temporal_clips* clip_len,  C, 256, 256)
-                input = input.view(-1, 3, input.size(2), input.size(3))
-                input = input.view(actual_bz * args.test_crops * n_clips,
-                                       args.clip_length, 3, input.size(2),input.size(3))  # (actual_bz * spatial_crops * temporal_clips* clip_len,  C, 256, 256) -> (actual_bz * spatial_crops * temporal_clips,  clip_len,  C, 256, 256)
+        for i, (input, target) in enumerate(val_loader):
+            input = input.to(device)
+            target = target.to(device)
 
-                output = model(input) #  (actual_bz * spatial_crops * temporal_clips,         clip_len,  C, 256, 256)   ->     (actual_bz * spatial_crops * temporal_clips,       n_class )
-                # take the average among all spatial_crops * temporal_clips,   (actual_bz * spatial_crops * temporal_clips,       n_class )  ->   (actual_bz,       n_class )
-                output = output.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
-            elif args.arch == 'videoswintransformer':
-                # the format shape is N C T H W
-                # (actual_bz,   C* spatial_crops * temporal_clips* clip_len,    256,     256)   -> (batch, n_views, C, T, H, W)
-                n_views = args.test_crops * n_clips
-                # input = input.view(-1, n_views, 3, args.clip_length, input.size(3), input.size(4))
-                output, _ = model(  input)  # (batch, n_views, C, T, H, W) ->  (batch, n_class), todo outputs are unnormalized scores
-
-
-
-            else:
-                input = input.reshape( (-1,) + input.shape[2:])  # (batch, n_views, 3, T, 224,224 ) -> (batch * n_views, 3, T, 224,224 )
-                output = model( input)  # (batch * n_views, 3, T, 224,224 ) ->  (batch * n_views,  n_class)  todo  reshape clip prediction into video prediction
-
-                output = torch.squeeze(output)
-                output = rearrange(output, '(d0 d1) d2 -> d0 d1 d2', d0=actual_bz)  # (batch * n_views,  n_class) ->  (batch, n_views,  n_class)  todo  reshape clip prediction into video prediction
-                output = torch.mean(output, dim=1)  # (batch, n_views,  n_class) ->  (batch,  n_class), take the average scores of multiple views
-
+            # compute output
+            output = model(input)
             loss = criterion(output, target)
 
             # measure accuracy and record loss
             prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
-            _, preds = torch.max(output, 1)
-            # pred_concat = np.concatenate([pred_concat, preds.detach().cpu().numpy()])
-            # gt_concat = np.concatenate([gt_concat, target.detach().cpu().numpy()])
-
-            losses.update(loss.item(), actual_bz)
-            top1.update(prec1.item(), actual_bz)
-            top5.update(prec5.item(), actual_bz)
+            losses.update(loss.item(), input.size(0))
+            top1.update(prec1.item(), input.size(0))
+            top5.update(prec5.item(), input.size(0))
 
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if args.verbose:
-                if i % args.print_freq == 0:
-                    logger.debug(('Test: [{0}/{1}]\t'
-                                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                                  'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                                  'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
-                        i, len(val_loader), batch_time=batch_time, loss=losses, top1=top1, top5=top5)))
+            if i % args.print_freq == 0:
+                logger.debug(('Test: [{0}/{1}]\t'
+                              'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                              'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                              'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
+                              'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+                    i, len(val_loader), batch_time=batch_time, loss=losses,
+                    top1=top1, top5=top5)))
 
-    logger.debug(('Testing Results: Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} Loss {loss.avg:.5f}'.format(top1=top1,
-                                                                                                            top5=top5,
-                                                                                                            loss=losses)))
+    logger.debug(('Testing Results: Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} Loss {loss.avg:.5f}'
+                  .format(top1=top1, top5=top5, loss=losses)))
     if writer is not None:
         writer.add_scalars('loss', {'val_loss': losses.avg}, global_step=epoch)
         writer.add_scalars('acc', {'val_acc': top1.avg}, global_step=epoch)
-    logger.debug(f'Validation acc {top1.avg} ')
-
-    # logger.debug(classification_report(pred_concat, gt_concat))
 
     return top1.avg
 
@@ -275,7 +200,7 @@ def compute_statistics(model = None, args=None, logger = None, log_time = None):
     with torch.no_grad():
         for batch_id, (input, target) in enumerate(data_loader):
             actual_bz = input.shape[0]
-            input = input.cuda()
+            input = input.to(device)
             if args.arch == 'tanet':
                 # (actual_bz, C* spatial_crops * temporal_clips* clip_len, 256, 256) ->   (actual_bz * spatial_crops * temporal_clips* clip_len,  C, 256, 256)
                 input = input.view(-1, 3, input.size(2), input.size(3))
@@ -361,7 +286,7 @@ def compute_cos_similarity(model = None, args = None, log_time = None):
     with torch.no_grad():
         for batch_id, (input, target) in enumerate(data_loader):
             actual_bz = input.shape[0]
-            input = input.cuda()
+            input = input.to(device)
             if args.arch == 'tanet':
                 # (actual_bz, C* spatial_crops * temporal_clips* clip_len, 256, 256) ->   (actual_bz * spatial_crops * temporal_clips* clip_len,  C, 256, 256)
                 input = input.view(-1, 3, input.size(2), input.size(3))
@@ -610,8 +535,8 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                     if isinstance(m, candidate):
                         m.eval()
         actual_bz = input.shape[0]
-        input = input.cuda()
-        target = target.cuda()
+        input = input.to(device)
+        target = target.to(device)
         # todo ############################################################
         # todo ##################################### reshape the input
         # todo ############################################################
@@ -655,10 +580,10 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
             else:
                 raise NotImplementedError(f'Incorrect model type {args.arch}')
             loss_ce = criterion(output, target)
-            loss_reg = torch.tensor(0).float().cuda()
+            loss_reg = torch.tensor(0).float().to(device)
             if args.stat_reg:
                 for hook in stat_reg_hooks:
-                    loss_reg += hook.r_feature.cuda()
+                    loss_reg += hook.r_feature.to(device)
             else:
                 raise Exception(f'undefined regularization type {args.stat_reg}')
             if if_pred_consistency:
@@ -691,7 +616,7 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
         with torch.no_grad():
             model.eval()
             input, target = next(eval_loader_iterator)
-            input, target = input.cuda(), target.cuda()
+            input, target = input.to(device), target.to(device)
             if args.arch == 'tanet':
                 # (actual_bz, C* spatial_crops * temporal_clips* clip_len, 256, 256) ->   (actual_bz * spatial_crops * temporal_clips* clip_len,  C, 256, 256)
                 input = input.view(-1, 3, input.size(2), input.size(3))
@@ -970,8 +895,8 @@ def test_time_adapt(model, criterion, args=None, logger=None, writer=None):
                         if isinstance(m, candidate):
                             m.eval()
             actual_bz = input.shape[0]
-            input = input.cuda()
-            target = target.cuda()
+            input = input.to(device)
+            target = target.to(device)
             if args.arch == 'tanet':
                 # (actual_bz,          C* spatial_crops * temporal_clips* clip_len,          256, 256) ->                  (actual_bz * spatial_crops * temporal_clips* clip_len,             C, 256, 256)
                 input = input.view(-1, 3, input.size(2), input.size(3))
@@ -1016,13 +941,13 @@ def test_time_adapt(model, criterion, args=None, logger=None, writer=None):
                 output = torch.mean(output, dim=1)  # (batch, n_views,  n_class) ->  (batch,  n_class)
             loss_ce = criterion(output, target)
 
-            loss_reg = torch.tensor(0).float().cuda()
+            loss_reg = torch.tensor(0).float().to(device)
             if args.stat_reg:
                 for hook in stat_reg_hooks:
-                    loss_reg += hook.r_feature.cuda()
+                    loss_reg += hook.r_feature.to(device)
             else:
                 for hook in bns_feature_hooks:
-                    loss_reg += hook.r_feature.cuda()
+                    loss_reg += hook.r_feature.to(device)
             if if_pred_consistency:
                 loss = args.lambda_feature_reg*loss_reg + args.lambda_pred_consis * loss_consis
             else:
@@ -1121,8 +1046,8 @@ def validate_brief(eval_loader, model, global_iter, epoch=None, args=None, logge
         for i, (input, target) in enumerate(eval_loader):  #
             model.eval()
             actual_bz = input.shape[0]
-            input = input.cuda()
-            target = target.cuda()
+            input = input.to(device)
+            target = target.to(device)
             if args.arch == 'tanet':
                 # (actual_bz, C* spatial_crops * temporal_clips* clip_len, 256, 256) ->   (actual_bz * spatial_crops * temporal_clips* clip_len,  C, 256, 256)
                 input = input.view(-1, 3, input.size(2), input.size(3))
@@ -1450,7 +1375,7 @@ def get_model(args, num_classes, logger):
     elif args.arch == 'i3d_incep':
         model = InceptionI3d(num_classes=400, in_channels=3)
         if args.use_pretrained:
-            model.load_state_dict(torch.load(args.pretrained_model))
+            model.load_state_dict(torch.load(args.pretrained_model, map_location=device))
             logger.debug(f'Loaded pretrained I3D Inception model {args.pretrained_model}')
         model.replace_logits(num_classes=num_classes)
     elif 'i3d_resnet' in args.arch:
@@ -1490,6 +1415,9 @@ def get_model(args, num_classes, logger):
         model = Recognizer3D(num_classes =  num_classes, patch_size= args.patch_size, window_size=args.window_size, drop_path_rate=args.drop_path_rate)
     else:
         raise Exception(f'{args.arch} is not a valid model!')
+    
+    # Move model to device
+    model = model.to(device)
     return model
 
 
@@ -1509,7 +1437,7 @@ def validate_old(val_loader, model, criterion, iter, epoch=None, args=None, logg
             target = target.reshape((target.shape[0], 1)).repeat(1, args.num_clips)
             target = target.reshape((-1,) + target.shape[2:])
 
-            target = target.cuda()
+            target = target.to(device)
             output = model(input)
             loss = criterion(output, target)
 

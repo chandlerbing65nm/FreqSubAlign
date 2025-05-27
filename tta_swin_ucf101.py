@@ -1,11 +1,23 @@
+import os
+# Configure AMD GPU
+os.environ['HIP_VISIBLE_DEVICES'] = '0'
+os.environ['HIP_LAUNCH_BLOCKING'] = '1'  # For better error reporting
+
 # import os.path as osp
 from utils.opts import get_opts
 from utils.utils_ import  get_writer_to_all_result
 from corpus.main_eval import eval
+import torch
 
-corruptions = ['gauss_shuffled',  'pepper_shuffled', 'salt_shuffled', 'shot_shuffled',
-               'zoom_shuffled', 'impulse_shuffled', 'defocus_shuffled', 'motion_shuffled',
-               'jpeg_shuffled', 'contrast_shuffled', 'rain_shuffled', 'h265_abr_shuffled',  ]
+# Set device configuration
+torch.backends.cudnn.enabled = False  # Disable cuDNN
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+corruptions = [
+    'gauss_shuffled', 'pepper_shuffled', 'salt_shuffled', 'shot_shuffled',
+    'zoom_shuffled', 'impulse_shuffled', 'defocus_shuffled', 'motion_shuffled',
+    'jpeg_shuffled', 'contrast_shuffled', 'rain_shuffled', 'h265_abr_shuffled',  
+    ]
 
 if __name__ == '__main__':
     global args
@@ -14,16 +26,14 @@ if __name__ == '__main__':
     args.arch = 'videoswintransformer'
     args.dataset = 'ucf101'
     # todo ========================= To Specify ==========================
-    args.model_path = '.../swin_base_patch244_window877_pretrain_kinetics400_30epoch_lr3e-5.pth'
-    args.video_data_dir = '.../level_5_ucf_val_split_1' #  main directory of the video data,  [args.video_data_dir] + [path in file list] should be complete absolute path for a video file
-    args.spatiotemp_mean_clean_file = '.../source_statistics_tanet_ucf/list_spatiotemp_mean_20221004_192722.npy'
-    args.spatiotemp_var_clean_file = '.../source_statistics_tanet_ucf/list_spatiotemp_var_20221004_192722.npy'
-    args.val_vid_list = '.../list_video_perturbations_ucf/{}.txt'
-    args.result_dir = '.../{}_{}/tta_{}'
+    args.model_path = '/scratch/project_465001897/datasets/ucf/model_swin_ucf/swin_ucf_base_patch244_window877_pretrain_kinetics400_30epoch_lr3e-5.pth'
+    args.video_data_dir = '/scratch/project_465001897/datasets/ucf/val_corruptions' #  main directory of the video data,  [args.video_data_dir] + [path in file list] should be complete absolute path for a video file
+    args.spatiotemp_mean_clean_file = '/scratch/project_465001897/datasets/ucf/source_statistics_swin_ucf/list_spatiotemp_mean_20221004_192722.npy'
+    args.spatiotemp_var_clean_file = '/scratch/project_465001897/datasets/ucf/source_statistics_swin_ucf/list_spatiotemp_var_20221004_192722.npy'
     # todo ========================= To Specify ==========================
 
 
-
+    args.batch_size = 8
     args.clip_length = 16
     args.num_clips = 1  # number of temporal clips
     args.test_crops = 1  # number of spatial crops
@@ -42,8 +52,9 @@ if __name__ == '__main__':
 
     for corr_id, args.corruptions in enumerate(corruptions):
         print(f'####Starting Evaluation for ::: {args.corruptions} corruption####')
-        args.val_vid_list = args.val_vid_list.format(args.corruptions)
-        args.result_dir = args.result_dir.format( args.arch, args.dataset, args.corruptions )
+        args.val_vid_list = f'/scratch/project_465001897/datasets/ucf/list_video_perturbations_ucf/{args.corruptions}.txt'
+        args.result_dir = f'/scratch/project_465001897/datasets/ucf/results/{args.arch}/{args.dataset}/{args.corruptions}'
+        
 
         epoch_result_list, _ = eval(args=args, )
         if corr_id == 0:

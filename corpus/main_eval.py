@@ -5,6 +5,13 @@ import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
 
+# Configure AMD GPU
+os.environ['HIP_LAUNCH_BLOCKING'] = '1'
+cudnn.enabled = False  # Disable cuDNN for AMD GPU
+
+# Disable Apex
+os.environ['DISABLE_APEX'] = '1'
+
 from utils.transforms import *
 from utils.utils_ import make_dir, path_logger, model_analysis
 # from models.r2plus1d import MyR2plus1d
@@ -21,6 +28,7 @@ from baselines.dua import dua_adaptation as adapt_dua
 from baselines.t3a import get_cls_ext, t3a_forward_and_adapt
 # import torch.nn as nn
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # def compute_temp_statistics(args = None,):
 
@@ -49,20 +57,27 @@ def eval(args=None, model = None ):
     args.num_classes = num_classes
 
     if model is None:
-        # todo  initialize the model if the model is not provided
+        # Initialize the model if not provided
         model = get_model(args, num_classes, logger)
-        # todo  load model weights
-        checkpoint = torch.load(args.model_path)
+        # Load model weights with proper device mapping
+        checkpoint = torch.load(args.model_path, map_location=device)
         logger.debug(f'Loading {args.model_path}')
         if args.arch == 'tanet':
             print("model epoch {} best prec@1: {}".format(checkpoint['epoch'], checkpoint['best_prec1']))
 
+        # Move model to device before loading state dict
+        model = model.to(device)
+        
+        # Remove Apex-related state dict entries
+        if 'amp' in checkpoint:
+            del checkpoint['amp']
+        
         if 'module.' in list(checkpoint['state_dict'].keys())[0]:
-            model = torch.nn.DataParallel(model, device_ids=args.gpus).cuda()
+            model = torch.nn.DataParallel(model)
             model.load_state_dict(checkpoint['state_dict'])
         else:
             model.load_state_dict(checkpoint['state_dict'])
-            model = torch.nn.DataParallel(model, device_ids=args.gpus).cuda()
+            model = torch.nn.DataParallel(model)
     if args.verbose:
         model_analysis(model, logger)
 
@@ -77,9 +92,10 @@ def eval(args=None, model = None ):
     cudnn.benchmark = True
 
     if args.loss_type == 'nll':
-        criterion = torch.nn.CrossEntropyLoss().cuda()
+        criterion = torch.nn.CrossEntropyLoss().to(device)
     else:
         raise ValueError("Unknown loss type")
+    
     if args.tta:
         # TTA
         writer = SummaryWriter(log_dir=osp.join(args.result_dir, f'{log_time}_tb'))
@@ -230,5 +246,4 @@ def eval(args=None, model = None ):
     logger.handlers.clear()
     # todo return the adapted model,  if no adaptation, returned model is None
     return epoch_result_list, model
-
 

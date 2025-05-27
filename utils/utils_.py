@@ -6,6 +6,7 @@ import getpass
 import logging
 import numpy as np
 import torchvision
+import torch
 # import torchvision.transforms
 
 
@@ -15,6 +16,8 @@ import os.path as osp
 import csv
 import shutil
 import time
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def make_dir(dir_):
     if not os.path.exists(dir_):
@@ -111,8 +114,8 @@ def path_logger(result_dir, log_time):
 
 
 def model_analysis(model, logger):
-    print("Model Structure")
-    print(model)
+    # print("Model Structure")
+    # print(model)
 
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])
@@ -191,9 +194,9 @@ class AverageMeterTensor(object):
     def __init__(self):
         self.reset()
     def reset(self):
-        self.val = torch.tensor(0).float().cuda()
-        self.avg = torch.tensor(0).float().cuda()
-        self.sum = torch.tensor(0).float().cuda()
+        self.val = torch.tensor(0).float().to(device)
+        self.avg = torch.tensor(0).float().to(device)
+        self.sum = torch.tensor(0).float().to(device)
         self.count = 0
     def update(self, val, n=1):
         self.val = val
@@ -206,7 +209,7 @@ class MovingAverageTensor(object):
         self.momentum = momentum
         self.reset()
     def reset(self):
-        self.avg = torch.tensor(0).float().cuda()
+        self.avg = torch.tensor(0).float().to(device)
     def update(self, val ):
         self.avg = self.momentum * val  + (1.0 - self.momentum) * self.avg.detach().to(val.device)
 
