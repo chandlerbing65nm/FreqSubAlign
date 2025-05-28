@@ -96,7 +96,7 @@ if __name__ == '__main__':
         setattr(args, key, value)
 
     # Create parent results directory
-    parent_result_dir = f'/scratch/project_465001897/datasets/ucf/results/source/{args.arch}_{args.dataset}'
+    parent_result_dir = f'/scratch/project_465001897/datasets/ucf/results/corruptions/{args.arch}_{args.dataset}'
     os.makedirs(parent_result_dir, exist_ok=True)
     
     # Create a single results file for all corruptions

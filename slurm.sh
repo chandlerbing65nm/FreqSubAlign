@@ -20,4 +20,4 @@ conda activate videotta
 cd /users/doloriel/work/Repo/ViTTA
 
 # Run the Python script
-python -m src_videotta 
+python -m compute_stats.compute_spatiotemp_stats_clean_train_tanet
