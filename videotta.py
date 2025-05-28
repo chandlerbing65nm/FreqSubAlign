@@ -96,7 +96,7 @@ if __name__ == '__main__':
         setattr(args, key, value)
 
     # Create parent results directory
-    parent_result_dir = f'/scratch/project_465001897/datasets/ucf/results/{args.arch}_{args.dataset}'
+    parent_result_dir = f'/scratch/project_465001897/datasets/ucf/results/source/{args.arch}_{args.dataset}'
     os.makedirs(parent_result_dir, exist_ok=True)
     
     # Create a single results file for all corruptions
@@ -107,7 +107,7 @@ if __name__ == '__main__':
     for corr_id, args.corruptions in enumerate(corruptions):
         print(f'####Starting Evaluation for ::: {args.corruptions} corruption####')
         args.val_vid_list = f'/scratch/project_465001897/datasets/ucf/list_video_perturbations_ucf/{args.corruptions}.txt'
-        args.result_dir = f'/scratch/project_465001897/datasets/ucf/results/{args.arch}_{args.dataset}/tta_{args.corruptions}'
+        args.result_dir = f'/scratch/project_465001897/datasets/ucf/results/corruptions/{args.arch}_{args.dataset}/tta_{args.corruptions}'
 
         # Clear GPU memory before each corruption
         torch.cuda.empty_cache()

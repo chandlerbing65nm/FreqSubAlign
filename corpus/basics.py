@@ -254,6 +254,8 @@ def compute_statistics(model = None, args=None, logger = None, log_time = None):
         n_clips = int(args.sample_style.split("-")[-1])
     elif args.arch == 'videoswintransformer':
         n_clips = args.num_clips
+
+
     if args.arch == 'tanet':
         data_loader = torch.utils.data.DataLoader(
             get_dataset_tanet(args,  split='val', dataset_type='eval'),
@@ -1225,6 +1227,7 @@ def get_dataset_tanet(args, split = 'train', dataset_type = None):
     from models.tanet_models.transforms import GroupFullResSample_TANet, GroupScale_TANet, GroupCenterCrop_TANet, Stack_TANet, ToTorchFormatTensor_TANet, \
         GroupNormalize_TANet, GroupMultiScaleCrop_TANet, SubgroupWise_MultiScaleCrop_TANet, SubgroupWise_RandomHorizontalFlip_TANet
     from models.tanet_models.video_dataset import Video_TANetDataSet
+    
     if split == 'train':
         raise NotImplementedError('Training dataset processing for TANet to be added!')
     elif split == 'val':
@@ -1236,6 +1239,7 @@ def get_dataset_tanet(args, split = 'train', dataset_type = None):
             if_sample_tta_aug_views = args.if_sample_tta_aug_views
         elif dataset_type == 'eval':
             if_sample_tta_aug_views = False
+
         tta_view_sample_style_list = args.tta_view_sample_style_list if if_sample_tta_aug_views else None
         n_augmented_views = args.n_augmented_views if if_sample_tta_aug_views else None
         if_spatial_rand_cropping = args.if_spatial_rand_cropping if if_sample_tta_aug_views else False

@@ -1,16 +1,16 @@
-
-
 import io
 import mmcv
-from mmcv.fileio import FileClient
+import mmengine
+from mmengine.fileio import FileClient
 import numpy as np
 import warnings
 import random
 from torch.nn.modules.utils import _pair
 from collections.abc import Sequence
-from mmcv.parallel import DataContainer as DC
+from mmengine.structures import BaseDataElement as DC
 import torch
 from numpy.random import randint
+
 def _init_lazy_if_proper(results, lazy):
     """Initialize lazy operation properly.
 
@@ -213,10 +213,10 @@ class RandomResizedCrop(RandomCrop):
         self.area_range = area_range
         self.aspect_ratio_range = aspect_ratio_range
         self.lazy = lazy
-        if not mmcv.is_tuple_of(self.area_range, float):
+        if not mmengine.utils.is_tuple_of(self.area_range, float):
             raise TypeError(f'Area_range must be a tuple of float, '
                             f'but got {type(area_range)}')
-        if not mmcv.is_tuple_of(self.aspect_ratio_range, float):
+        if not mmengine.utils.is_tuple_of(self.aspect_ratio_range, float):
             raise TypeError(f'Aspect_ratio_range must be a tuple of float, '
                             f'but got {type(aspect_ratio_range)}')
 
@@ -686,7 +686,7 @@ class SampleFrames:
                 start_index = results['start_index']
                 frame_inds = np.concatenate(frame_inds) + start_index
         frame_inds = np.minimum(frame_inds, results['video_reader']._num_frame - 1 )
-        results['frame_inds'] = frame_inds.astype(np.int)  # todo  concatenate the frame indices into   (n_clips * clip_len, )
+        results['frame_inds'] = frame_inds.astype(np.int64)  # todo  concatenate the frame indices into   (n_clips * clip_len, )
         results['clip_len'] = self.clip_len
         results['frame_interval'] = self.frame_interval
         if self.if_sample_tta_aug_views:
@@ -890,7 +890,7 @@ class CenterCrop(RandomCrop):
     def __init__(self, crop_size, lazy=False):
         self.crop_size = _pair(crop_size)
         self.lazy = lazy
-        if not mmcv.is_tuple_of(self.crop_size, int):
+        if not mmengine.utils.is_tuple_of(self.crop_size, int):
             raise TypeError(f'Crop_size must be int or tuple of int, '
                             f'but got {type(crop_size)}')
 

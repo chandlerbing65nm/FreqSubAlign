@@ -61,6 +61,7 @@ def eval(args=None, model = None ):
         else:
             model.load_state_dict(checkpoint['state_dict'])
             model = torch.nn.DataParallel(model, device_ids=args.gpus).to(device)
+            
     if args.verbose:
         model_analysis(model, logger)
 

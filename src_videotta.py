@@ -85,7 +85,7 @@ if __name__ == '__main__':
     args.batch_size = 8 
 
     # Choose model architecture (either 'videoswintransformer' or 'tanet')
-    args.arch = 'videoswintransformer'  # Change this to switch between models
+    args.arch = 'tanet'  # Change this to switch between models
     
     # Get model-specific configuration
     model_config = get_model_config(args.arch)
@@ -101,7 +101,7 @@ if __name__ == '__main__':
     args.baseline = 'source'
 
     # Create parent results directory
-    parent_result_dir = f'/scratch/project_465001897/datasets/ucf/results/{args.arch}_{args.dataset}'
+    parent_result_dir = f'/scratch/project_465001897/datasets/ucf/results/source/{args.arch}_{args.dataset}'
     os.makedirs(parent_result_dir, exist_ok=True)
     
     # Create a single results file for all corruptions
@@ -112,12 +112,12 @@ if __name__ == '__main__':
     for corr_id, args.corruptions in enumerate(corruptions):
         print(f'####Starting Evaluation for ::: {args.corruptions} corruption####')
         args.val_vid_list = f'/scratch/project_465001897/datasets/ucf/list_video_perturbations_ucf/{args.corruptions}.txt'
-        args.result_dir = f'/scratch/project_465001897/datasets/ucf/results/{args.arch}_{args.dataset}/tta_{args.corruptions}'
+        args.result_dir = f'/scratch/project_465001897/datasets/ucf/results/source/{args.arch}_{args.dataset}/tta_{args.corruptions}'
 
         # Clear GPU memory before each corruption
         torch.cuda.empty_cache()
         
-        epoch_result_list = eval(args=args)
+        epoch_result_list, _ = eval(args=args)  # Unpack the tuple, ignore the model return value
 
         # Write corruption name and results
         f_write.write(f'\n{args.corruptions}:\n')
