@@ -25,26 +25,27 @@ def set_seed(seed=42):
 torch.cuda.empty_cache()
 torch.backends.cudnn.benchmark = False
 
-corruptions = [
-    'gauss_shuffled', 'pepper_shuffled', 'salt_shuffled', 'shot_shuffled',
-    'zoom_shuffled', 'impulse_shuffled', 'defocus_shuffled', 'motion_shuffled',
-    'jpeg_shuffled', 'contrast_shuffled', 'rain_shuffled', 'h265_abr_shuffled',  
-]
+corruptions = ['gauss', 'pepper', 'salt', 'shot',
+               'zoom', 'impulse', 'defocus', 'motion',
+               'jpeg', 'contrast', 'rain', 'h265_abr']
 
 def get_model_config(arch):
     config = {
         'model_path': '',
-        'spatiotemp_mean_clean_file': '',
-        'spatiotemp_var_clean_file': '',
+        'video_data_dir': '',
+        'val_vid_list': '',
+        'result_dir': '',
         'additional_args': {}
     }
     
     if arch == 'videoswintransformer':
         config.update({
             'model_path': '/scratch/project_465001897/datasets/ucf/model_swin_ucf/swin_ucf_base_patch244_window877_pretrain_kinetics400_30epoch_lr3e-5.pth',
-            'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_swin_ucf/list_spatiotemp_mean_20221004_192722.npy',
-            'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_swin_ucf/list_spatiotemp_var_20221004_192722.npy',
+            'video_data_dir': '/scratch/project_465001897/datasets/ucf/val_corruptions',
+            'val_vid_list': '/scratch/project_465001897/datasets/ucf/list_video_perturbations_ucf/{}.txt',
+            'result_dir': '/scratch/project_465001897/datasets/ucf/results/{}_{}/tta_{}',
             'additional_args': {
+                'batch_size': 8,
                 'clip_length': 16,
                 'num_clips': 1,
                 'test_crops': 1,
@@ -52,19 +53,20 @@ def get_model_config(arch):
                 'frame_interval': 2,
                 'scale_size': 224,
                 'patch_size': (2,4,4),
-                'window_size': (8, 7, 7),
-                'lr': 0.00001,
-                'lambda_pred_consis': 0.05,
-                'momentum_mvg': 0.05,
-                'chosen_blocks': ['module.backbone.layers.2', 'module.backbone.layers.3', 'module.backbone.norm']
+                'window_size': (8, 7, 7)
             }
         })
     elif arch == 'tanet':
         config.update({
             'model_path': '/scratch/project_465001897/datasets/ucf/model_tanet_ucf/tanet_ucf.pth.tar',
-            'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_ucf/list_spatiotemp_mean_20220908_235138.npy',
-            'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_ucf/list_spatiotemp_var_20220908_235138.npy',
+            'video_data_dir': '/scratch/project_465001897/datasets/ucf/val_corruptions',
+            'val_vid_list': '/scratch/project_465001897/datasets/ucf/list_video_perturbations_ucf/{}.txt',
+            'result_dir': '/scratch/project_465001897/datasets/ucf/results/{}_{}/tta_{}',
             'additional_args': {
+                'batch_size': 8,
+                'clip_length': 16,
+                'sample_style': 'uniform-1',
+                'test_crops': 1
             }
         })
     
@@ -83,17 +85,20 @@ if __name__ == '__main__':
     args.batch_size = 8 
 
     # Choose model architecture (either 'videoswintransformer' or 'tanet')
-    args.arch = 'tanet'  # Change this to switch between models
+    args.arch = 'videoswintransformer'  # Change this to switch between models
     
     # Get model-specific configuration
     model_config = get_model_config(args.arch)
     args.model_path = model_config['model_path']
-    args.spatiotemp_mean_clean_file = model_config['spatiotemp_mean_clean_file']
-    args.spatiotemp_var_clean_file = model_config['spatiotemp_var_clean_file']
     
     # Set additional arguments for Swin Transformer if needed
     for key, value in model_config['additional_args'].items():
         setattr(args, key, value)
+
+    # Set source-only evaluation parameters
+    args.tta = False
+    args.evaluate_baselines = not args.tta
+    args.baseline = 'source'
 
     # Create parent results directory
     parent_result_dir = f'/scratch/project_465001897/datasets/ucf/results/{args.arch}_{args.dataset}'
@@ -101,7 +106,7 @@ if __name__ == '__main__':
     
     # Create a single results file for all corruptions
     f_write = get_writer_to_all_result(args, custom_path=parent_result_dir)
-    f_write.write('Corruption Results:\n')
+    f_write.write('Source-only Evaluation Results:\n')
     f_write.write('#############################\n')
 
     for corr_id, args.corruptions in enumerate(corruptions):
@@ -112,7 +117,7 @@ if __name__ == '__main__':
         # Clear GPU memory before each corruption
         torch.cuda.empty_cache()
         
-        epoch_result_list, _ = eval(args=args)
+        epoch_result_list = eval(args=args)
 
         # Write corruption name and results
         f_write.write(f'\n{args.corruptions}:\n')
