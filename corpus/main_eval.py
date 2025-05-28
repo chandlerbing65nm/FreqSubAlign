@@ -5,12 +5,6 @@ import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
 
-# Configure AMD GPU
-os.environ['HIP_LAUNCH_BLOCKING'] = '1'
-cudnn.enabled = False  # Disable cuDNN for AMD GPU
-
-# Disable Apex
-os.environ['DISABLE_APEX'] = '1'
 
 from utils.transforms import *
 from utils.utils_ import make_dir, path_logger, model_analysis
@@ -27,8 +21,7 @@ from baselines.shot import train as train_shot
 from baselines.dua import dua_adaptation as adapt_dua
 from baselines.t3a import get_cls_ext, t3a_forward_and_adapt
 # import torch.nn as nn
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+from config import device
 
 
 

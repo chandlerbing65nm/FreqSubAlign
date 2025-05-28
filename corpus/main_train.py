@@ -20,8 +20,7 @@ from utils.utils_ import  make_dir, path_logger, model_analysis, \
 # from utils.BNS_utils import BN3DFeatureHook, choose_BN_layers
 # import baselines.tent as tent
 from corpus.basics import train, validate,  get_dataset, get_model
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+from config import device
 
 def main_train(args=None, best_prec1=0, ):
     log_time = time.strftime("%Y%m%d_%H%M%S")

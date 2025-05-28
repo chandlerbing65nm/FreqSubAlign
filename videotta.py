@@ -1,16 +1,29 @@
 import os
 # Configure AMD GPU
-os.environ['HIP_VISIBLE_DEVICES'] = '0'
-os.environ['HIP_LAUNCH_BLOCKING'] = '1'  # For better error reporting
 
 from utils.opts import get_opts
 from utils.utils_ import get_writer_to_all_result
 from corpus.main_eval import eval
 import torch
+import random
+import numpy as np
 
 # Set device configuration
-torch.backends.cudnn.enabled = False  # Disable cuDNN
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+from config import device
+
+# Set random seeds for reproducibility
+def set_seed(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+# Enable memory optimization
+torch.cuda.empty_cache()
+torch.backends.cudnn.benchmark = False
 
 corruptions = [
     'gauss_shuffled', 'pepper_shuffled', 'salt_shuffled', 'shot_shuffled',
@@ -51,7 +64,8 @@ def get_model_config(arch):
             'model_path': '/scratch/project_465001897/datasets/ucf/model_tanet_ucf/tanet_ucf.pth.tar',
             'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_ucf/list_spatiotemp_mean_20220908_235138.npy',
             'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_ucf/list_spatiotemp_var_20220908_235138.npy',
-            'additional_args': {}
+            'additional_args': {
+            }
         })
     
     return config
@@ -59,13 +73,17 @@ def get_model_config(arch):
 if __name__ == '__main__':
     global args
     args = get_opts()
+    
+    # Set seed
+    set_seed(42)
+    
     args.gpus = [0]
     args.dataset = 'ucf101'
     args.video_data_dir = '/scratch/project_465001897/datasets/ucf/val_corruptions'
-    args.batch_size = 8
+    args.batch_size = 8 
 
     # Choose model architecture (either 'videoswintransformer' or 'tanet')
-    args.arch = 'videoswintransformer'  # Change this to switch between models
+    args.arch = 'tanet'  # Change this to switch between models
     
     # Get model-specific configuration
     model_config = get_model_config(args.arch)
@@ -77,17 +95,28 @@ if __name__ == '__main__':
     for key, value in model_config['additional_args'].items():
         setattr(args, key, value)
 
+    # Create parent results directory
+    parent_result_dir = f'/scratch/project_465001897/datasets/ucf/results/{args.arch}_{args.dataset}'
+    os.makedirs(parent_result_dir, exist_ok=True)
+    
+    # Create a single results file for all corruptions
+    f_write = get_writer_to_all_result(args, custom_path=parent_result_dir)
+    f_write.write('Corruption Results:\n')
+    f_write.write('#############################\n')
+
     for corr_id, args.corruptions in enumerate(corruptions):
         print(f'####Starting Evaluation for ::: {args.corruptions} corruption####')
         args.val_vid_list = f'/scratch/project_465001897/datasets/ucf/list_video_perturbations_ucf/{args.corruptions}.txt'
         args.result_dir = f'/scratch/project_465001897/datasets/ucf/results/{args.arch}_{args.dataset}/tta_{args.corruptions}'
 
+        # Clear GPU memory before each corruption
+        torch.cuda.empty_cache()
+        
         epoch_result_list, _ = eval(args=args)
 
-        if corr_id == 0:
-            f_write = get_writer_to_all_result(args)
+        # Write corruption name and results
+        f_write.write(f'\n{args.corruptions}:\n')
         f_write.write(' '.join([str(round(float(xx), 3)) for xx in epoch_result_list]) + '\n')
-
         f_write.flush()
-        if corr_id == len(corruptions) - 1:
-            f_write.close() 
+
+    f_write.close() 

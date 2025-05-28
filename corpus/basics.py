@@ -13,7 +13,7 @@ import torchvision.datasets
 import torchvision.models
 import numpy as np
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+from config import device
 
 from datasets_.dataset_deprecated import MyTSNDataset
 from datasets_.video_dataset import MyTSNVideoDataset, MyVideoDataset

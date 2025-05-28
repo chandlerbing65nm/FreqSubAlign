@@ -6,15 +6,25 @@ import getpass
 import logging
 import numpy as np
 import torchvision
-# import torchvision.transforms
-
-
-from utils.transforms import *
-# from transforms import *
+import torch
+import torch.nn as nn
+import torch.nn.parallel
+import torch.backends.cudnn as cudnn
+import torch.utils.data
+import torch.utils.data.distributed
+import torchvision.transforms
+import torchvision.datasets
+import torchvision.models
 import os.path as osp
 import csv
 import shutil
 import time
+import random
+import torch.nn.functional as F
+from config import device
+
+from utils.transforms import *
+# from transforms import *
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -114,7 +124,7 @@ def path_logger(result_dir, log_time):
 
 def model_analysis(model, logger):
     print("Model Structure")
-    print(model)
+    # print(model)
 
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])

@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
+import numpy as np
 from utils.utils_ import AverageMeter, AverageMeterTensor, MovingAverageTensor
+from config import device
 
 l1_loss = nn.L1Loss(reduction='mean')
 mse_loss = nn.MSELoss(reduction='mean')
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def compute_kld(mean_true, mean_pred, var_true, var_pred):
     # mean1 and std1 are for true distribution
