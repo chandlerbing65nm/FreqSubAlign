@@ -31,7 +31,7 @@ if __name__ == '__main__':
     args.baseline = 'source'
 
     args.compute_stat = 'mean_var'
-    args.stat_type = 'spatiotemp'
+    args.stat_type = 'spatiotemp' # temp, spatiotemp
 
     args.corruptions = 'clean'
     args.result_dir = f'/scratch/project_465001897/datasets/ucf/source_statistics_{args.arch}_ucf'

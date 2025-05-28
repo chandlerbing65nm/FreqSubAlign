@@ -11,9 +11,12 @@ from utils.utils_ import make_dir, path_logger, model_analysis
 # from models.r2plus1d import MyR2plus1d
 # from models import i3d
 
-from corpus.basics import validate, get_dataset, get_dataset_tanet, get_dataset_videoswin, \
-    get_dataset_tanet_dua, get_model, test_time_adapt, compute_statistics, compute_cos_similarity, \
-    tta_standard
+from corpus.training import train, validate, validate_brief
+from corpus.test_time_adaptation import tta_standard, test_time_adapt, evaluate_baselines
+from corpus.dataset_utils import get_dataset, get_dataset_tanet, get_dataset_videoswin
+from corpus.model_utils import get_model
+from corpus.statistics_utils import compute_statistics, compute_cos_similarity, load_precomputed_statistics
+
 import os.path as osp
 from tensorboardX import SummaryWriter
 from baselines.setup_baseline import setup_model

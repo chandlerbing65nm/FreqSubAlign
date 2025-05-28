@@ -1,7 +1,7 @@
 import torch.nn as nn
 from utils.utils_ import *
 # from corpus.main_train import validate_brief
-from corpus.basics import validate_brief
+from corpus.training import train, validate, validate_brief
 from baselines.dua_utils import rotate_batch
 
 

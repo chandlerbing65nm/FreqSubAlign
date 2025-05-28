@@ -132,6 +132,7 @@ class CombineNormStatsRegHook_onereg():
 
         assert self.stat_type_list == ['spatiotemp']
 
+
         # self.source_mean_temp, self.source_var_temp = temp_stats_clean_tuple
         # self.source_mean_spatial, self.source_var_spatial = spatial_stats_clean_tuple
         self.source_mean_spatiotemp, self.source_var_spatiotemp = spatiotemp_stats_clean_tuple
