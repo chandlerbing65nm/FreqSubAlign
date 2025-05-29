@@ -151,10 +151,10 @@ def validate(val_loader, model, criterion, iter, epoch=None, args=None, logger=N
         elif args.baseline == 'dua':
             logger.debug(f'Starting ---- {args.corruptions} ---- evaluation for DUA...')
 
+    model.eval()
     with torch.no_grad():
         end = time.time()
         for i, (input, target) in enumerate(val_loader):  #
-            model.eval()
             actual_bz = input.shape[0]
             input = input.to(device)
             target = target.to(device)

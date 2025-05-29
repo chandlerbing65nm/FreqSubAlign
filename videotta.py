@@ -47,7 +47,7 @@ def get_model_config(arch):
             'additional_args': {
                 'clip_length': 16,
                 'num_clips': 1,
-                'test_crops': 1,
+                'test_crops': 3,
                 'frame_uniform': True,
                 'frame_interval': 2,
                 'scale_size': 224,
@@ -65,6 +65,7 @@ def get_model_config(arch):
             'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_ucf/list_spatiotemp_mean_20250529_134901.npy',
             'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_ucf/list_spatiotemp_var_20250529_134901.npy',
             'additional_args': {
+                'test_crops': 3,
             }
         })
     
@@ -80,11 +81,11 @@ if __name__ == '__main__':
     args.gpus = [0]
     args.dataset = 'ucf101'
     args.video_data_dir = '/scratch/project_465001897/datasets/ucf/val_corruptions'
-    args.batch_size = 8 
+    args.batch_size = 1 
     args.n_epoch_adapat = 1
 
     # Choose model architecture (either 'videoswintransformer' or 'tanet')
-    args.arch = 'tanet'  # Change this to switch between models
+    args.arch = 'videoswintransformer'  # Change this to switch between models
     
     # Get model-specific configuration
     model_config = get_model_config(args.arch)

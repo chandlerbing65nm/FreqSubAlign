@@ -2,6 +2,7 @@ import os
 import time
 import torch.utils.data.dataloader
 import torch.nn.parallel
+from torch.nn.parallel import DistributedDataParallel
 import torch.backends.cudnn as cudnn
 import torch.optim
 

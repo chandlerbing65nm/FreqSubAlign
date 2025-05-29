@@ -35,6 +35,7 @@ import baselines.tent as tent
 import os.path as osp
 from utils.pred_consistency_utils import compute_pred_consis
 import copy as cp
+from torch.nn.parallel import DistributedDataParallel
 
 # from corpus.training import train, validate, validate_brief
 from corpus.dataset_utils import get_dataset, get_dataset_tanet, get_dataset_videoswin
