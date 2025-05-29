@@ -233,20 +233,32 @@ def adjust_learning_rate(optimizer, epoch, lr_steps, args=None):
         param_group['weight_decay'] = decay
 
 
-def accuracy(output, target, topk=(1,)):
-    """Computes the precision@k for the specified values of k"""
-    maxk = max(topk)
-    batch_size = target.size(0)
+def accuracy(output: torch.Tensor, target: torch.Tensor, topk: tuple = (1,)) -> list:
+    """
+    Computes the precision@k for the specified values of k.
+    
+    Args:
+        output: Model output tensor of shape (batch_size, num_classes)
+        target: Ground truth tensor of shape (batch_size,)
+        topk: Tuple of k values to compute accuracy for
+        
+    Returns:
+        List of accuracy values for each k in topk
+    """
+    with torch.no_grad():
+        maxk = max(topk)
+        batch_size = target.size(0)
 
-    _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
+        # Get top-k predictions
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t()
+        correct = pred.eq(target.view(1, -1).expand_as(pred))
 
-    res = []
-    for k in topk:
-        correct_k = correct[:k].reshape(-1).float().sum(0)
-        res.append(correct_k.mul_(100.0 / batch_size))
-    return res
+        res = []
+        for k in topk:
+            correct_k = correct[:k].reshape(-1).float().sum(0)
+            res.append(correct_k.mul_(100.0 / batch_size))
+        return res
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar', result_dir=None, log_time=None, logger=None,

@@ -20,7 +20,7 @@ from utils.utils_ import  make_dir, path_logger, model_analysis, \
 # from utils.BNS_utils import BN3DFeatureHook, choose_BN_layers
 # import baselines.tent as tent
 from corpus.training import train, validate, validate_brief
-from corpus.test_time_adaptation import tta_standard, test_time_adapt, evaluate_baselines
+from corpus.test_time_adaptation import tta_standard, evaluate_baselines
 from corpus.dataset_utils import get_dataset, get_dataset_tanet, get_dataset_videoswin
 from corpus.model_utils import get_model
 from corpus.statistics_utils import compute_statistics, compute_cos_similarity, load_precomputed_statistics

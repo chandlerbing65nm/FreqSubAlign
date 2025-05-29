@@ -12,7 +12,7 @@ from utils.utils_ import make_dir, path_logger, model_analysis
 # from models import i3d
 
 from corpus.training import train, validate, validate_brief
-from corpus.test_time_adaptation import tta_standard, test_time_adapt, evaluate_baselines
+from corpus.test_time_adaptation import tta_standard, evaluate_baselines
 from corpus.dataset_utils import get_dataset, get_dataset_tanet, get_dataset_videoswin
 from corpus.model_utils import get_model
 from corpus.statistics_utils import compute_statistics, compute_cos_similarity, load_precomputed_statistics
@@ -59,11 +59,11 @@ def eval(args=None, model = None ):
             print("model epoch {} best prec@1: {}".format(checkpoint['epoch'], checkpoint['best_prec1']))
 
         if 'module.' in list(checkpoint['state_dict'].keys())[0]:
-            model = torch.nn.DataParallel(model, device_ids=args.gpus).to(device)
+            model = torch.nn.DataParallel(model).to(device)
             model.load_state_dict(checkpoint['state_dict'])
         else:
             model.load_state_dict(checkpoint['state_dict'])
-            model = torch.nn.DataParallel(model, device_ids=args.gpus).to(device)
+            model = torch.nn.DataParallel(model).to(device)
             
     if args.verbose:
         model_analysis(model, logger)

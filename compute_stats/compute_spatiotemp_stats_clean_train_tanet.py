@@ -22,7 +22,7 @@ if __name__ == '__main__':
     # todo ========================= To Specify ==========================
 
     args.clip_length = 16
-    args.batch_size = 32  # 12
+    args.batch_size = 12  # 12
     args.sample_style = 'uniform-1'  # number of temporal clips
     args.test_crops = 1  # number of spatial crops
 
@@ -34,7 +34,7 @@ if __name__ == '__main__':
     args.stat_type = 'spatiotemp' # temp, spatiotemp
 
     args.corruptions = 'clean'
-    args.result_dir = f'/scratch/project_465001897/datasets/ucf/source_statistics_{args.arch}_ucf'
+    args.result_dir = f'/scratch/project_465001897/datasets/ucf/source_statistics_tanet_ucf'
     eval(args=args, )
 
 

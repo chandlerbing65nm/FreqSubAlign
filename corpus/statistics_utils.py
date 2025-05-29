@@ -38,7 +38,7 @@ import copy as cp
 
 # from corpus.training import train, validate, validate_brief
 # from corpus.test_time_adaptation import tta_standard, test_time_adapt, evaluate_baselines
-# from corpus.dataset_utils import get_dataset, get_dataset_tanet, get_dataset_videoswin
+from corpus.dataset_utils import get_dataset, get_dataset_tanet, get_dataset_videoswin
 # from corpus.model_utils import get_model
 
 def compute_statistics(model = None, args=None, logger = None, log_time = None):
