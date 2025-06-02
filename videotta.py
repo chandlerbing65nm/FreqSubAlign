@@ -25,11 +25,15 @@ def set_seed(seed=42):
 torch.cuda.empty_cache()
 torch.backends.cudnn.benchmark = True
 
-corruptions = [
-    'gauss_shuffled', 'pepper_shuffled', 'salt_shuffled', 'shot_shuffled',
-    'zoom_shuffled', 'impulse_shuffled', 'defocus_shuffled', 'motion_shuffled',
-    'jpeg_shuffled', 'contrast_shuffled', 'rain_shuffled', 'h265_abr_shuffled',  
-]
+# corruptions = [
+#     'gauss_shuffled', 'pepper_shuffled', 'salt_shuffled', 'shot_shuffled',
+#     'zoom_shuffled', 'impulse_shuffled', 'defocus_shuffled', 'motion_shuffled',
+#     'jpeg_shuffled', 'contrast_shuffled', 'rain_shuffled', 'h265_abr_shuffled',  
+# ]
+
+corruptions = ['gauss', 'pepper', 'salt', 'shot',
+               'zoom', 'impulse', 'defocus', 'motion',
+               'jpeg', 'contrast', 'rain', 'h265_abr']
 
 def get_model_config(arch):
     config = {
@@ -61,9 +65,9 @@ def get_model_config(arch):
         })
     elif arch == 'tanet':
         config.update({
-            'model_path': '/scratch/project_465001897/datasets/ucf/model_tanet_ucf/tanet_ucf.pth.tar',
-            'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_ucf/list_spatiotemp_mean_20250529_134901.npy',
-            'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_ucf/list_spatiotemp_var_20250529_134901.npy',
+            'model_path': '/scratch/project_465001897/datasets/ss2/model_tanet/ckpt.best.pth.tar',
+            'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ss2/source_statistics_tanet/list_spatiotemp_mean_20250602_104419.npy',
+            'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ss2/source_statistics_tanet/list_spatiotemp_var_20250602_104419.npy',
             'additional_args': {
                 'test_crops': 3,
             }
@@ -79,13 +83,14 @@ if __name__ == '__main__':
     set_seed(142)
     
     args.gpus = [0]
-    args.dataset = 'ucf101'
-    args.video_data_dir = '/scratch/project_465001897/datasets/ucf/val_corruptions'
+    args.dataset = 'somethingv2' # somethingv2, ucf101
+    args.video_data_dir = '/scratch/project_465001897/datasets/ss2/val_corruptions'
     args.batch_size = 1 
     args.n_epoch_adapat = 1
+    args.vid_format = '.mp4' # only for ss2
 
     # Choose model architecture (either 'videoswintransformer' or 'tanet')
-    args.arch = 'videoswintransformer'  # Change this to switch between models
+    args.arch = 'tanet'  # Change this to switch between models
     
     # Get model-specific configuration
     model_config = get_model_config(args.arch)
@@ -98,7 +103,7 @@ if __name__ == '__main__':
         setattr(args, key, value)
 
     # Create parent results directory
-    parent_result_dir = f'/scratch/project_465001897/datasets/ucf/results/corruptions/{args.arch}_{args.dataset}'
+    parent_result_dir = f'/scratch/project_465001897/datasets/ss2/results/corruptions/{args.arch}_{args.dataset}'
     os.makedirs(parent_result_dir, exist_ok=True)
     
     # Create a single results file for all corruptions
@@ -108,8 +113,8 @@ if __name__ == '__main__':
 
     for corr_id, args.corruptions in enumerate(corruptions):
         print(f'####Starting Evaluation for ::: {args.corruptions} corruption####')
-        args.val_vid_list = f'/scratch/project_465001897/datasets/ucf/list_video_perturbations_ucf/{args.corruptions}.txt'
-        args.result_dir = f'/scratch/project_465001897/datasets/ucf/results/corruptions/{args.arch}_{args.dataset}/tta_{args.corruptions}'
+        args.val_vid_list = f'/scratch/project_465001897/datasets/ss2/list_video_perturbations_ss2/{args.corruptions}.txt'
+        args.result_dir = f'/scratch/project_465001897/datasets/ss2/results/corruptions/{args.arch}_{args.dataset}/tta_{args.corruptions}'
 
         # Clear GPU memory before each corruption
         torch.cuda.empty_cache()

@@ -58,8 +58,8 @@ def get_model_config(arch):
         })
     elif arch == 'tanet':
         config.update({
-            'model_path': '/scratch/project_465001897/datasets/ucf/model_tanet_ucf/tanet_ucf.pth.tar',
-            'video_data_dir': '/scratch/project_465001897/datasets/ucf/val_corruptions',
+            'model_path': '/scratch/project_465001897/datasets/ss2/model_tanet/ckpt.best.pth.tar',
+            'video_data_dir': '/scratch/project_465001897/datasets/ss2/val_corruptions',
             'val_vid_list': '/scratch/project_465001897/datasets/ucf/list_video_perturbations_ucf/{}.txt',
             'result_dir': '/scratch/project_465001897/datasets/ucf/results/{}_{}/tta_{}',
             'additional_args': {
@@ -80,9 +80,10 @@ if __name__ == '__main__':
     set_seed(142)
     
     args.gpus = [0]
-    args.dataset = 'ucf101'
-    args.video_data_dir = '/scratch/project_465001897/datasets/ucf/val_corruptions'
+    args.dataset = 'somethingv2'
+    args.video_data_dir = '/scratch/project_465001897/datasets/ss2/val_corruptions'
     args.batch_size = 8 
+    args.vid_format = '.mp4' # only for ss2
 
     # Choose model architecture (either 'videoswintransformer' or 'tanet')
     args.arch = 'tanet'  # Change this to switch between models
@@ -101,7 +102,7 @@ if __name__ == '__main__':
     args.baseline = 'source'
 
     # Create parent results directory
-    parent_result_dir = f'/scratch/project_465001897/datasets/ucf/results/source/{args.arch}_{args.dataset}'
+    parent_result_dir = f'/scratch/project_465001897/datasets/ss2/results/source/{args.arch}_{args.dataset}'
     os.makedirs(parent_result_dir, exist_ok=True)
     
     # Create a single results file for all corruptions
@@ -111,8 +112,8 @@ if __name__ == '__main__':
 
     for corr_id, args.corruptions in enumerate(corruptions):
         print(f'####Starting Evaluation for ::: {args.corruptions} corruption####')
-        args.val_vid_list = f'/scratch/project_465001897/datasets/ucf/list_video_perturbations_ucf/{args.corruptions}.txt'
-        args.result_dir = f'/scratch/project_465001897/datasets/ucf/results/source/{args.arch}_{args.dataset}/tta_{args.corruptions}'
+        args.val_vid_list = f'/scratch/project_465001897/datasets/ss2/list_video_perturbations_ss2/{args.corruptions}.txt'
+        args.result_dir = f'/scratch/project_465001897/datasets/ss2/results/source/{args.arch}_{args.dataset}/tta_{args.corruptions}'
 
         # Clear GPU memory before each corruption
         torch.cuda.empty_cache()

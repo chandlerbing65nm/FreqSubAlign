@@ -14,7 +14,7 @@
 
 # Activate your virtual environment if needed
 conda init
-conda activate videotta
+conda activate ttadapt
 
 # Set the working directory
 cd /users/doloriel/work/Repo/ViTTA
