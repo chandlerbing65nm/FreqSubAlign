@@ -31,11 +31,14 @@ torch.backends.cudnn.benchmark = True
 #     'jpeg_shuffled', 'contrast_shuffled', 'rain_shuffled', 'h265_abr_shuffled',  
 # ]
 
-corruptions = ['gauss', 'pepper', 'salt', 'shot',
-               'zoom', 'impulse', 'defocus', 'motion',
-               'jpeg', 'contrast', 'rain', 'h265_abr']
+corruptions = [
+    'gauss', 'pepper', 'salt', 'shot',
+    'zoom', 'impulse', 'defocus', 'motion',
+    'jpeg', 'contrast', 'rain', 'h265_abr'
+    ]
 
-def get_model_config(arch):
+def get_model_config(arch, dataset='somethingv2'):
+    """Get model configuration based on architecture and dataset."""
     config = {
         'model_path': '',
         'spatiotemp_mean_clean_file': '',
@@ -43,35 +46,75 @@ def get_model_config(arch):
         'additional_args': {}
     }
     
+    # Common parameters for both architectures
+    common_args = {
+        'test_crops': 3,
+        'frame_uniform': True,
+        'frame_interval': 2,
+        'scale_size': 224,
+    }
+    
     if arch == 'videoswintransformer':
-        config.update({
-            'model_path': '/scratch/project_465001897/datasets/ucf/model_swin_ucf/swin_ucf_base_patch244_window877_pretrain_kinetics400_30epoch_lr3e-5.pth',
-            'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_swin_ucf/list_spatiotemp_mean_20221004_192722.npy',
-            'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_swin_ucf/list_spatiotemp_var_20221004_192722.npy',
-            'additional_args': {
-                'clip_length': 16,
-                'num_clips': 1,
-                'test_crops': 3,
-                'frame_uniform': True,
-                'frame_interval': 2,
-                'scale_size': 224,
-                'patch_size': (2,4,4),
-                'window_size': (8, 7, 7),
-                'lr': 0.00001,
-                'lambda_pred_consis': 0.05,
-                'momentum_mvg': 0.05,
-                'chosen_blocks': ['module.backbone.layers.2', 'module.backbone.layers.3', 'module.backbone.norm']
-            }
-        })
+        if dataset == 'ucf101':
+            config.update({
+                'model_path': '/scratch/project_465001897/datasets/ucf/model_swin_ucf/swin_ucf_base_patch244_window877_pretrain_kinetics400_30epoch_lr3e-5.pthh',
+                'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_swin_ucf/list_spatiotemp_mean_20221004_192722.npy',
+                'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_swin_ucf/list_spatiotemp_var_20221004_192722.npy',
+                'additional_args': {
+                    **common_args,
+                    'clip_length': 16,
+                    'num_clips': 1,
+                    'patch_size': (2, 4, 4),
+                    'window_size': (8, 7, 7),
+                    'chosen_blocks': ['module.backbone.layers.2', 'module.backbone.layers.3', 'module.backbone.norm'],
+                    'lr': 1e-5,  # Swin-UCF
+                    'lambda_pred_consis': 0.05,
+                    'momentum_mvg': 0.05
+                }
+            })
+        elif dataset == 'somethingv2':
+            config.update({
+                'model_path': '/scratch/project_465001897/datasets/ss2/model_swin/swin_base_patch244_window1677_sthv2.pth',
+                'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ss2/source_statistics_swin/list_spatiotemp_mean_20250603_172215.npy',
+                'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ss2/source_statistics_swin/list_spatiotemp_var_20250603_172215.npy',
+                'additional_args': {
+                    **common_args,
+                    'clip_length': 16,
+                    'num_clips': 1,
+                    'patch_size': (2, 4, 4),
+                    'window_size': (16, 7, 7),
+                    'chosen_blocks': ['module.backbone.layers.2', 'module.backbone.layers.3', 'module.backbone.norm'],
+                    'lr': 1e-5,  # Swin-SS2
+                    'lambda_pred_consis': 0.05,
+                    'momentum_mvg': 0.05
+                }
+            })
+            
     elif arch == 'tanet':
-        config.update({
-            'model_path': '/scratch/project_465001897/datasets/ss2/model_tanet/ckpt.best.pth.tar',
-            'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ss2/source_statistics_tanet/list_spatiotemp_mean_20250602_104419.npy',
-            'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ss2/source_statistics_tanet/list_spatiotemp_var_20250602_104419.npy',
-            'additional_args': {
-                'test_crops': 3,
-            }
-        })
+        if dataset == 'somethingv2':
+            config.update({
+                'model_path': '/scratch/project_465001897/datasets/ss2/model_tanet/ckpt.best.pth.tar',
+                'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ss2/source_statistics_tanet/list_spatiotemp_mean_20250602_104419.npy',
+                'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ss2/source_statistics_tanet/list_spatiotemp_var_20250602_104419.npy',
+                'additional_args': {
+                    **common_args,
+                    'clip_length': 8,
+                    'window_size': (8, 7, 7),
+                    'lr': 1e-5  # TANet-SS2
+                }
+            })
+        elif dataset == 'ucf101':
+            config.update({
+                'model_path': '/scratch/project_465001897/datasets/ucf/model_tanet_ucf/tanet_ucf.pth.tar',
+                'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_ucf/list_spatiotemp_mean_20220908_235138.npy',
+                'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_ucf/list_spatiotemp_mean_20250529_134901.npy',
+                'additional_args': {
+                    **common_args,
+                    'clip_length': 16,
+                    'window_size': (8, 7, 7),
+                    'lr': 5e-5  # TANet-UCF
+                }
+            })
     
     return config
 
@@ -83,22 +126,22 @@ if __name__ == '__main__':
     set_seed(142)
     
     args.gpus = [0]
-    args.dataset = 'somethingv2' # somethingv2, ucf101
     args.video_data_dir = '/scratch/project_465001897/datasets/ss2/val_corruptions'
     args.batch_size = 1 
     args.n_epoch_adapat = 1
     args.vid_format = '.mp4' # only for ss2
 
-    # Choose model architecture (either 'videoswintransformer' or 'tanet')
-    args.arch = 'tanet'  # Change this to switch between models
+    # Choose model architecture
+    args.arch = 'videoswintransformer' # videoswintransformer, tanet
+    args.dataset = 'somethingv2' # somethingv2, ucf101
     
     # Get model-specific configuration
-    model_config = get_model_config(args.arch)
+    model_config = get_model_config(args.arch, args.dataset)
     args.model_path = model_config['model_path']
     args.spatiotemp_mean_clean_file = model_config['spatiotemp_mean_clean_file']
     args.spatiotemp_var_clean_file = model_config['spatiotemp_var_clean_file']
     
-    # Set additional arguments for Swin Transformer if needed
+    # Set additional arguments for the selected architecture
     for key, value in model_config['additional_args'].items():
         setattr(args, key, value)
 
@@ -113,7 +156,7 @@ if __name__ == '__main__':
 
     for corr_id, args.corruptions in enumerate(corruptions):
         print(f'####Starting Evaluation for ::: {args.corruptions} corruption####')
-        args.val_vid_list = f'/scratch/project_465001897/datasets/ss2/list_video_perturbations_ss2/{args.corruptions}.txt'
+        args.val_vid_list = f'/scratch/project_465001897/datasets/ss2/list_video_perturbations/{args.corruptions}.txt'
         args.result_dir = f'/scratch/project_465001897/datasets/ss2/results/corruptions/{args.arch}_{args.dataset}/tta_{args.corruptions}'
 
         # Clear GPU memory before each corruption

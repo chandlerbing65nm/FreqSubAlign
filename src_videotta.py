@@ -29,7 +29,8 @@ corruptions = ['gauss', 'pepper', 'salt', 'shot',
                'zoom', 'impulse', 'defocus', 'motion',
                'jpeg', 'contrast', 'rain', 'h265_abr']
 
-def get_model_config(arch):
+def get_model_config(arch, dataset='somethingv2'):
+    """Get model configuration based on architecture and dataset."""
     config = {
         'model_path': '',
         'video_data_dir': '',
@@ -38,24 +39,40 @@ def get_model_config(arch):
         'additional_args': {}
     }
     
+    # Common parameters for both architectures
+    common_args = {
+        'batch_size': 1,
+        'test_crops': 1,
+        'frame_uniform': True,
+        'frame_interval': 2,
+        'scale_size': 224,
+    }
+    
     if arch == 'videoswintransformer':
         config.update({
-            'model_path': '/scratch/project_465001897/datasets/ucf/model_swin_ucf/swin_ucf_base_patch244_window877_pretrain_kinetics400_30epoch_lr3e-5.pth',
-            'video_data_dir': '/scratch/project_465001897/datasets/ucf/val_corruptions',
+            'model_path': '/scratch/project_465001897/datasets/ss2/model_swin/swin_base_patch244_window1677_sthv2.pth',
+            'video_data_dir': '/scratch/project_465001897/datasets/ss2/videos/samples_mp4',
             'val_vid_list': '/scratch/project_465001897/datasets/ucf/list_video_perturbations_ucf/{}.txt',
             'result_dir': '/scratch/project_465001897/datasets/ucf/results/{}_{}/tta_{}',
             'additional_args': {
-                'batch_size': 8,
-                'clip_length': 16,
+                **common_args,
+                'patch_size': (2, 4, 4),
                 'num_clips': 1,
-                'test_crops': 1,
-                'frame_uniform': True,
-                'frame_interval': 2,
-                'scale_size': 224,
-                'patch_size': (2,4,4),
-                'window_size': (8, 7, 7)
             }
         })
+        
+        # Set architecture-specific parameters
+        if dataset == 'somethingv2':
+            config['additional_args'].update({
+                'clip_length': 16,
+                'window_size': (16, 7, 7)
+            })
+        elif dataset == 'ucf101':
+            config['additional_args'].update({
+                'clip_length': 16,
+                'window_size': (8, 7, 7)
+            })
+            
     elif arch == 'tanet':
         config.update({
             'model_path': '/scratch/project_465001897/datasets/ss2/model_tanet/ckpt.best.pth.tar',
@@ -63,12 +80,22 @@ def get_model_config(arch):
             'val_vid_list': '/scratch/project_465001897/datasets/ucf/list_video_perturbations_ucf/{}.txt',
             'result_dir': '/scratch/project_465001897/datasets/ucf/results/{}_{}/tta_{}',
             'additional_args': {
-                'batch_size': 8,
-                'clip_length': 16,
-                'sample_style': 'uniform-1',
-                'test_crops': 1
+                **common_args,
+                'sample_style': 'uniform-1'
             }
         })
+        
+        # Set architecture-specific parameters
+        if dataset == 'somethingv2':
+            config['additional_args'].update({
+                'clip_length': 8,
+                'window_size': (8, 7, 7)
+            })
+        elif dataset == 'ucf101':
+            config['additional_args'].update({
+                'clip_length': 16,
+                'window_size': (8, 7, 7)
+            })
     
     return config
 
@@ -82,17 +109,17 @@ if __name__ == '__main__':
     args.gpus = [0]
     args.dataset = 'somethingv2'
     args.video_data_dir = '/scratch/project_465001897/datasets/ss2/val_corruptions'
-    args.batch_size = 8 
+    args.batch_size = 1
     args.vid_format = '.mp4' # only for ss2
 
     # Choose model architecture (either 'videoswintransformer' or 'tanet')
-    args.arch = 'tanet'  # Change this to switch between models
+    args.arch = 'videoswintransformer'  # Change this to switch between models
     
     # Get model-specific configuration
-    model_config = get_model_config(args.arch)
+    model_config = get_model_config(args.arch, args.dataset)
     args.model_path = model_config['model_path']
     
-    # Set additional arguments for Swin Transformer if needed
+    # Set additional arguments for the selected architecture
     for key, value in model_config['additional_args'].items():
         setattr(args, key, value)
 
