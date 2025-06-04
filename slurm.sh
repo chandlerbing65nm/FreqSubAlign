@@ -20,4 +20,4 @@ conda activate ttadapt
 cd /users/doloriel/work/Repo/ViTTA
 
 # Run the Python script
-python -m videotta
+python -m src_videotta

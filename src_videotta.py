@@ -25,9 +25,11 @@ def set_seed(seed=42):
 torch.cuda.empty_cache()
 torch.backends.cudnn.benchmark = False
 
-corruptions = ['gauss', 'pepper', 'salt', 'shot',
-               'zoom', 'impulse', 'defocus', 'motion',
-               'jpeg', 'contrast', 'rain', 'h265_abr']
+corruptions = [
+    # 'gauss', 'pepper', 'salt', 'shot',
+    # 'zoom', 'impulse', 'defocus', 'motion',
+    # 'jpeg',
+    'contrast', 'rain', 'h265_abr']
 
 def get_model_config(arch, dataset='somethingv2'):
     """Get model configuration based on architecture and dataset."""
@@ -51,9 +53,9 @@ def get_model_config(arch, dataset='somethingv2'):
     if arch == 'videoswintransformer':
         config.update({
             'model_path': '/scratch/project_465001897/datasets/ss2/model_swin/swin_base_patch244_window1677_sthv2.pth',
-            'video_data_dir': '/scratch/project_465001897/datasets/ss2/videos/samples_mp4',
-            'val_vid_list': '/scratch/project_465001897/datasets/ucf/list_video_perturbations_ucf/{}.txt',
-            'result_dir': '/scratch/project_465001897/datasets/ucf/results/{}_{}/tta_{}',
+            'video_data_dir': '',
+            'val_vid_list': '',
+            'result_dir': '',
             'additional_args': {
                 **common_args,
                 'patch_size': (2, 4, 4),
@@ -76,9 +78,9 @@ def get_model_config(arch, dataset='somethingv2'):
     elif arch == 'tanet':
         config.update({
             'model_path': '/scratch/project_465001897/datasets/ss2/model_tanet/ckpt.best.pth.tar',
-            'video_data_dir': '/scratch/project_465001897/datasets/ss2/val_corruptions',
-            'val_vid_list': '/scratch/project_465001897/datasets/ucf/list_video_perturbations_ucf/{}.txt',
-            'result_dir': '/scratch/project_465001897/datasets/ucf/results/{}_{}/tta_{}',
+            'video_data_dir': '',
+            'val_vid_list': '',
+            'result_dir': '',
             'additional_args': {
                 **common_args,
                 'sample_style': 'uniform-1'
@@ -139,7 +141,7 @@ if __name__ == '__main__':
 
     for corr_id, args.corruptions in enumerate(corruptions):
         print(f'####Starting Evaluation for ::: {args.corruptions} corruption####')
-        args.val_vid_list = f'/scratch/project_465001897/datasets/ss2/list_video_perturbations_ss2/{args.corruptions}.txt'
+        args.val_vid_list = f'/scratch/project_465001897/datasets/ss2/list_video_perturbations/{args.corruptions}.txt'
         args.result_dir = f'/scratch/project_465001897/datasets/ss2/results/source/{args.arch}_{args.dataset}/tta_{args.corruptions}'
 
         # Clear GPU memory before each corruption
