@@ -57,9 +57,9 @@ def get_model_config(arch, dataset='somethingv2'):
     if arch == 'videoswintransformer':
         if dataset == 'ucf101':
             config.update({
-                'model_path': '/scratch/project_465001897/datasets/ucf/model_swin_ucf/swin_ucf_base_patch244_window877_pretrain_kinetics400_30epoch_lr3e-5.pthh',
-                'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_swin_ucf/list_spatiotemp_mean_20221004_192722.npy',
-                'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_swin_ucf/list_spatiotemp_var_20221004_192722.npy',
+                'model_path': '/scratch/project_465001897/datasets/ucf/model_swin/swin_ucf_base_patch244_window877_pretrain_kinetics400_30epoch_lr3e-5.pthh',
+                'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_swin/list_spatiotemp_mean_20221004_192722.npy',
+                'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_swin/list_spatiotemp_var_20221004_192722.npy',
                 'additional_args': {
                     **common_args,
                     'clip_length': 16,
@@ -93,9 +93,9 @@ def get_model_config(arch, dataset='somethingv2'):
     elif arch == 'tanet':
         if dataset == 'somethingv2':
             config.update({
-                'model_path': '/scratch/project_465001897/datasets/ss2/model_tanet/ckpt.best.pth.tar',
-                'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ss2/source_statistics_tanet/list_spatiotemp_mean_20250602_104419.npy',
-                'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ss2/source_statistics_tanet/list_spatiotemp_var_20250602_104419.npy',
+                'model_path': '/scratch/project_465001897/datasets/ss2/source_statistics_tanet/TR50_S2_256_8x3x2.pth.tar',
+                'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ss2/source_statistics_tanet/list_spatiotemp_mean_20250606_173132.npy',
+                'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ss2/source_statistics_tanet/list_spatiotemp_mean_20250606_173132.npy',
                 'additional_args': {
                     **common_args,
                     'clip_length': 8,
@@ -105,9 +105,9 @@ def get_model_config(arch, dataset='somethingv2'):
             })
         elif dataset == 'ucf101':
             config.update({
-                'model_path': '/scratch/project_465001897/datasets/ucf/model_tanet_ucf/tanet_ucf.pth.tar',
-                'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_ucf/list_spatiotemp_mean_20220908_235138.npy',
-                'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_ucf/list_spatiotemp_mean_20250529_134901.npy',
+                'model_path': '/scratch/project_465001897/datasets/ucf/model_tanet/tanet_ucf.pth.tar',
+                'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet/list_spatiotemp_mean_20220908_235138.npy',
+                'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet/list_spatiotemp_mean_20250529_134901.npy',
                 'additional_args': {
                     **common_args,
                     'clip_length': 16,
@@ -132,7 +132,7 @@ if __name__ == '__main__':
     args.vid_format = '.mp4' # only for ss2
 
     # Choose model architecture
-    args.arch = 'videoswintransformer' # videoswintransformer, tanet
+    args.arch = 'tanet' # videoswintransformer, tanet
     args.dataset = 'somethingv2' # somethingv2, ucf101
     
     # Get model-specific configuration

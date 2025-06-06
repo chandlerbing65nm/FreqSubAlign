@@ -77,7 +77,7 @@ def get_model_config(arch, dataset='somethingv2'):
             
     elif arch == 'tanet':
         config.update({
-            'model_path': '/scratch/project_465001897/datasets/ss2/model_tanet/ckpt.best.pth.tar',
+            'model_path': '/scratch/project_465001897/datasets/ss2/source_statistics_tanet/TR50_S2_256_8x3x2.pth.tar',
             'video_data_dir': '',
             'val_vid_list': '',
             'result_dir': '',
@@ -109,13 +109,13 @@ if __name__ == '__main__':
     set_seed(142)
     
     args.gpus = [0]
-    args.dataset = 'somethingv2'
     args.video_data_dir = '/scratch/project_465001897/datasets/ss2/val_corruptions'
     args.batch_size = 1
     args.vid_format = '.mp4' # only for ss2
 
-    # Choose model architecture (either 'videoswintransformer' or 'tanet')
-    args.arch = 'videoswintransformer'  # Change this to switch between models
+    # Choose model architecture
+    args.arch = 'tanet' # videoswintransformer, tanet
+    args.dataset = 'somethingv2' # somethingv2, ucf101
     
     # Get model-specific configuration
     model_config = get_model_config(args.arch, args.dataset)

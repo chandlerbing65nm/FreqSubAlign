@@ -16,12 +16,12 @@ if __name__ == '__main__':
 
 
     # todo ========================= To Specify ==========================
-    args.model_path = '/scratch/project_465001897/datasets/ss2/model_tanet/ckpt.best.pth.tar'
+    args.model_path = '/scratch/project_465001897/datasets/ss2/source_statistics_tanet/TR50_S2_256_8x3x2.pth.tar'
     args.video_data_dir = '/scratch/project_465001897/datasets/ss2/videos/samples_mp4' #  main directory of the video data,  [args.video_data_dir] + [path in file list] should be complete absolute path for a video file
     args.val_vid_list = '/scratch/project_465001897/datasets/ss2/videos/train_rgb.txt' # list of training data for computing statistics, with lines in format :   file_path n_frames class_id
     # todo ========================= To Specify ==========================
 
-    args.clip_length = 16
+    args.clip_length = 8
     args.batch_size = 12  # 12
     args.sample_style = 'uniform-1'  # number of temporal clips
     args.test_crops = 1  # number of spatial crops
