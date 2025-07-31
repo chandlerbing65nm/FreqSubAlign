@@ -22,13 +22,13 @@ def parse_args():
                         help='root directory for the input videos')
     parser.add_argument('out_path', type=str,
                         help='root directory for the output labels')
-    parser.add_argument('--level', type=int, default=2, choices=[1, 2, 3],
+    parser.add_argument('--level', type=int, default=2, choices=[1, 2, 3, 4],
                         help='the number of level for folders')
     parser.add_argument('--lib', type=str, default='ffmpeg',
                         choices=['opencv', 'ffmpeg'],
                         help='the decode lib')
     parser.add_argument('--dataset', type=str, required=True,
-                        choices=['ucf101', 'hmdb51', 'kinetics400', 'kinetics600', 'kinetics700', 'sthv1', 'sthv2'],
+                        choices=['uffia', 'ucf101', 'hmdb51', 'kinetics400', 'kinetics600', 'kinetics700', 'sthv1', 'sthv2'],
                         help='name of the dataset')
     parser.add_argument('--ann_root', type=str, default='annotation',
                         help='root directory for annotations')
@@ -64,18 +64,25 @@ def count_frames(video_path, decode_type='ffmpeg'):
         cap.release()
         return frame_count
 
-def process_video(tup, decode_type):
+def process_video(tup, decode_type, video_root=None):
     """Process a single video to count frames
     
     Args:
         tup (tuple): (source_path, dest_path)
         decode_type (str): Library to use for decoding
+        video_root (str): Root video directory to calculate relative path
     
     Returns:
         tuple: (relative_path, frame_count)
     """
     src, dest = tup
-    video_id = os.path.splitext(os.path.basename(src))[0]
+    if video_root:
+        # Generate relative path from video root (for level > 1)
+        video_id = os.path.relpath(src, video_root)
+        video_id = os.path.splitext(video_id)[0]  # Remove extension
+    else:
+        # Just use filename (for level 1)
+        video_id = os.path.splitext(os.path.basename(src))[0]
     frame_count = count_frames(src, decode_type)
     return (video_id, frame_count)
 
@@ -125,6 +132,8 @@ def generate_labels(video_path, out_path, frame_counts, dataset, ann_path, level
         generate_sth_labels(video_path, ann_path, out_path, frame_counts)
     elif 'kinetics' in dataset:
         generate_kinetics_labels(video_path, ann_path, out_path, frame_counts, level, phase)
+    elif dataset == 'uffia':
+        generate_uffia_labels(video_path, ann_path, out_path, frame_counts, split)
     elif dataset in ['ucf101', 'hmdb51']:
         generate_ucf_hmdb_labels(video_path, ann_path, out_path, frame_counts, split)
 
@@ -226,7 +235,8 @@ def generate_ucf_hmdb_labels(data_path, ann_path, out_path, frame_counts, split)
     """Generate labels for UCF101 and HMDB51 datasets"""
     label_file = osp.join(ann_path, 'category.txt')
     files_input = [osp.join(ann_path, f'trainlist0{split}.txt'),
-                  osp.join(ann_path, f'testlist0{split}.txt')]
+                #   osp.join(ann_path, f'testlist0{split}.txt')]
+                    osp.join(ann_path, f'vallist0{split}.txt')]
     files_output = [osp.join(out_path, f'train_rgb_split_{split}.txt'),
                    osp.join(out_path, f'val_rgb_split_{split}.txt')]
 
@@ -244,6 +254,47 @@ def generate_ucf_hmdb_labels(data_path, ann_path, out_path, frame_counts, split)
             
             frame_count = frame_counts.get(osp.join(label, video_id), 0)
             output.append(f'{label}/{video_id} {frame_count} {category_idx}')
+        
+        with open(filename_output, 'w') as f:
+            f.write('\n'.join(output))
+
+def generate_uffia_labels(data_path, ann_path, out_path, frame_counts, split):
+    """Generate labels for UFFIA dataset"""
+    # Create category mapping for UFFIA classes
+    categories = ['none', 'strong', 'medium', 'weak']
+    dict_categories = {cat: i for i, cat in enumerate(categories)}
+    
+    # Write category file
+    category_file = osp.join(out_path, 'category.txt')
+    with open(category_file, 'w') as f:
+        for cat in categories:
+            f.write(f'{cat}\n')
+    
+    files_input = [osp.join(ann_path, f'trainlist0{split}.txt'),
+                   osp.join(ann_path, f'vallist0{split}.txt')]
+    files_output = [osp.join(out_path, f'train_rgb_split_{split}.txt'),
+                   osp.join(out_path, f'val_rgb_split_{split}.txt')]
+
+    for filename_input, filename_output in zip(files_input, files_output):
+        output = []
+        with open(filename_input) as f:
+            lines = f.readlines()
+        
+        for line in lines:
+            # UFFIA format: 2022_6_13/AM_40/none/13_video_1.mp4
+            video_path = line.rstrip()
+            video_id = video_path.replace('.mp4', '')
+            
+            # Extract class from path (3rd level: date/time/class/file)
+            path_parts = video_id.split('/')
+            if len(path_parts) >= 3:
+                class_name = path_parts[2]  # 'none', 'weak', 'medium', 'strong'
+                category_idx = dict_categories.get(class_name, 0)
+            else:
+                category_idx = 0
+            
+            frame_count = frame_counts.get(video_id, 0)
+            output.append(f'{video_id} {frame_count} {category_idx}')
         
         with open(filename_output, 'w') as f:
             f.write('\n'.join(output))
@@ -306,9 +357,24 @@ def calculate_split_totals(frame_counts, dataset, ann_path, phase='train', split
                 video_id = f"{items[1]}_{int(items[2]):06d}_{int(items[3]):06d}"
                 totals[phase] += frame_counts.get(video_id, 0)
                 
+    elif dataset == 'uffia':
+        files_input = [osp.join(ann_path, f'trainlist0{split}.txt'),
+                      osp.join(ann_path, f'vallist0{split}.txt')]
+        splits = ['train', 'val']
+        
+        for filename_input, split_name in zip(files_input, splits):
+            with open(filename_input) as f:
+                lines = f.readlines()
+                for line in lines:
+                    # UFFIA format: 2022_6_13/AM_40/none/13_video_1.mp4
+                    # Extract the full path without extension as video_id
+                    video_path = line.rstrip()
+                    video_id = video_path.replace('.mp4', '')
+                    totals[split_name] += frame_counts.get(video_id, 0)
+                    
     elif dataset in ['ucf101', 'hmdb51']:
         files_input = [osp.join(ann_path, f'trainlist0{split}.txt'),
-                      osp.join(ann_path, f'testlist0{split}.txt')]
+                      osp.join(ann_path, f'vallist0{split}.txt')]
         splits = ['train', 'val']
         
         for filename_input, split_name in zip(files_input, splits):
@@ -338,6 +404,10 @@ def main():
         src_list = glob.glob(osp.join(args.video_path, '*', '*', '*'))
         dest_list = [osp.join(args.out_path, vid.split('/')[-3], vid.split('/')[-2], osp.split(vid)[-1])
                     for vid in src_list]
+    elif args.level == 4:
+        src_list = glob.glob(osp.join(args.video_path, '*', '*', '*', '*'))
+        dest_list = [osp.join(args.out_path, vid.split('/')[-4], vid.split('/')[-3], vid.split('/')[-2], osp.split(vid)[-1])
+                    for vid in src_list]
 
     # Filter for video files only
     video_extensions = ('.mp4', '.avi', '.webm', '.mkv')
@@ -349,7 +419,9 @@ def main():
     
     # Count frames in parallel
     pool = multiprocessing.Pool(n_thread)
-    worker = partial(process_video, decode_type=args.lib)
+    # Pass video_root for levels > 1 to generate correct relative paths
+    video_root = args.video_path if args.level > 1 else None
+    worker = partial(process_video, decode_type=args.lib, video_root=video_root)
     
     from tqdm import tqdm
     results = []
@@ -367,9 +439,16 @@ def main():
             break
         print(f"{video_id}: {count} frames")
     
+    # Debug: Show total videos found
+    print(f"\nDEBUG: Total videos in frame_counts: {len(frame_counts)}")
+    if frame_counts:
+        sample_key = list(frame_counts.keys())[0]
+        print(f"DEBUG: Sample video_id format: '{sample_key}'")
+    
     # Calculate and display total frames per split
     totals = calculate_split_totals(frame_counts, args.dataset, 
-                                 osp.join(args.ann_root, args.dataset),
+                                #  osp.join(args.ann_root, args.dataset),
+                                 args.ann_root,
                                  args.phase, args.split)
     
     print("\nTotal frames per split:")
@@ -378,7 +457,8 @@ def main():
     
     # Generate labels
     generate_labels(args.video_path, args.out_path, frame_counts, 
-                   args.dataset, osp.join(args.ann_root, args.dataset),
+                #    args.dataset, osp.join(args.ann_root, args.dataset),
+                   args.dataset, args.ann_root,
                    args.level, args.phase, args.split)
 
 if __name__ == "__main__":

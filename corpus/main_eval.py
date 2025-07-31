@@ -5,6 +5,7 @@ import torch.nn.parallel
 from torch.nn.parallel import DistributedDataParallel
 import torch.backends.cudnn as cudnn
 import torch.optim
+import torch.nn as nn
 
 
 from utils.transforms import *
@@ -39,6 +40,7 @@ def eval(args=None, model = None ):
             if arg[0] != '_':
                 logger.debug(f'{arg} {getattr(args, arg)}')
     num_class_dict = {
+        'uffia' : 4,
         'ucf101' : 101,
         'hmdb51': 51,
         'kinetics': 400,
@@ -52,7 +54,15 @@ def eval(args=None, model = None ):
 
     if model is None:
         # todo  initialize the model if the model is not provided
-        model = get_model(args, num_classes, logger)
+        # Always use checkpoint's class count when loading pretrained weights
+        if 'ucf101' or 'ucf' in args.model_path.lower():
+            checkpoint_num_classes = num_class_dict['ucf101']
+        elif 'somethingv2' or 'ss2' in args.model_path.lower():
+            checkpoint_num_classes = num_class_dict['somethingv2']
+        else:
+            checkpoint_num_classes = num_classes
+        model = get_model(args, checkpoint_num_classes, logger)
+        
         # todo  load model weights
         checkpoint = torch.load(args.model_path)
         logger.debug(f'Loading {args.model_path}')
@@ -61,11 +71,46 @@ def eval(args=None, model = None ):
 
         if 'module.' in list(checkpoint['state_dict'].keys())[0]:
             model = torch.nn.DataParallel(model).to(device)
-            model.load_state_dict(checkpoint['state_dict'])
+            model.load_state_dict(checkpoint['state_dict'], strict=False)
         else:
-            model.load_state_dict(checkpoint['state_dict'])
+            model.load_state_dict(checkpoint['state_dict'], strict=False)
             model = torch.nn.DataParallel(model).to(device)
+
+        # Adjust classification layer for target dataset if needed
+        if checkpoint_num_classes != num_classes:
+            logger.info(f'Adjusting classification layer from {checkpoint_num_classes} to {num_classes} classes')
             
+            if args.arch == 'tanet':
+                # TANet uses TSN model with new_fc layer
+                if hasattr(model.module, 'new_fc') and model.module.new_fc is not None:
+                    # Model uses dropout + new_fc architecture
+                    feature_dim = model.module.new_fc.in_features
+                    model.module.new_fc = nn.Linear(feature_dim, num_classes).to(device)
+                else:
+                    # Model uses direct replacement of last layer
+                    feature_dim = getattr(model.module.base_model, model.module.base_model.last_layer_name).in_features
+                    setattr(model.module.base_model, model.module.base_model.last_layer_name, 
+                            nn.Linear(feature_dim, num_classes).to(device))
+            
+            elif args.arch == 'videoswintransformer':
+                # Video Swin Transformer uses head.fc
+                if hasattr(model.module, 'head') and hasattr(model.module.head, 'fc'):
+                    feature_dim = model.module.head.fc.in_features
+                    model.module.head.fc = nn.Linear(feature_dim, num_classes).to(device)
+                else:
+                    # Fallback: look for classifier layer
+                    for name, module in model.named_modules():
+                        if 'fc' in name.lower() and isinstance(module, nn.Linear):
+                            if module.out_features == checkpoint_num_classes:
+                                feature_dim = module.in_features
+                                new_fc = nn.Linear(feature_dim, num_classes).to(device)
+                                parent = model
+                                name_parts = name.split('.')
+                                for part in name_parts[:-1]:
+                                    parent = getattr(parent, part)
+                                setattr(parent, name_parts[-1], new_fc)
+                                break
+
     if args.verbose:
         model_analysis(model, logger)
 

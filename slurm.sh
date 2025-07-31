@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name=videotta
+#SBATCH --job-name=chandlertasks
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --ntasks-per-node=1
@@ -20,4 +20,4 @@ conda activate ttadapt
 cd /users/doloriel/work/Repo/ViTTA
 
 # Run the Python script
-python -m src_videotta
+python -m train --arch tanet

@@ -17,11 +17,17 @@ def set_architecture_params(args):
         elif args.dataset == 'ucf101':
             args.clip_length = 16
             args.window_size = (8, 7, 7)
+        elif args.dataset == 'uffia':
+            args.clip_length = 16
+            args.window_size = (8, 7, 7)
     elif args.arch == 'tanet':
         if args.dataset == 'somethingv2':
             args.clip_length = 8
             args.window_size = (8, 7, 7)
         elif args.dataset == 'ucf101':
+            args.clip_length = 16
+            args.window_size = (8, 7, 7)
+        elif args.dataset == 'uffia':
             args.clip_length = 16
             args.window_size = (8, 7, 7)
     return args
@@ -31,13 +37,13 @@ if __name__ == '__main__':
     args = get_opts()
     args.gpus = [0]
     args.arch = 'videoswintransformer'
-    args.dataset = 'somethingv2'
+    args.dataset = 'uffia'
     args.vid_format = '.mp4' # .webm, .avi
 
     # todo ========================= To Specify ==========================
-    args.model_path = '/scratch/project_465001897/datasets/ss2/model_swin/swin_base_patch244_window1677_sthv2.pth'
-    args.video_data_dir = '/scratch/project_465001897/datasets/ss2/videos/samples_mp4'  #  main directory of the video data,  [args.video_data_dir] + [path in file list] should be complete absolute path for a video file
-    args.val_vid_list = '/scratch/project_465001897/datasets/ss2/videos/train_rgb.txt' # list of training data for computing statistics, with lines in format :   file_path n_frames class_id
+    args.model_path = '/scratch/project_465001897/datasets/ucf/model_swin/swin_ucf_base_patch244_window877_pretrain_kinetics400_30epoch_lr3e-5.pth'
+    args.video_data_dir = '/scratch/project_465001897/datasets/uffia/video'  #  main directory of the video data,  [args.video_data_dir] + [path in file list] should be complete absolute path for a video file
+    args.val_vid_list = '/scratch/project_465001897/datasets/uffia/split/train_rgb_split_1.txt' # list of training data for computing statistics, with lines in format :   file_path n_frames class_id
     # todo ========================= To Specify ==========================
 
     args.batch_size = 12  # 12
@@ -62,7 +68,7 @@ if __name__ == '__main__':
     args.stat_type = 'spatiotemp'
 
     args.corruptions = 'clean'
-    args.result_dir = f'/scratch/project_465001897/datasets/ss2/source_statistics_swin'
+    args.result_dir = f'/scratch/project_465001897/datasets/uffia/source_statistics_swin'
     eval(args=args, )
 
 

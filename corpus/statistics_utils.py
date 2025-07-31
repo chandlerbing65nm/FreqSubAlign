@@ -129,8 +129,9 @@ def compute_statistics(model = None, args=None, logger = None, log_time = None):
         list_stat_mean[hook_id] = list_stat_mean[hook_id].avg.cpu().numpy()
         list_stat_var[hook_id] = list_stat_var[hook_id].avg.cpu().numpy()
 
-    np.save( osp.join(args.result_dir,  f'list_{args.stat_type}_mean_{log_time}.npy'), list_stat_mean, allow_pickle=True)
-    np.save( osp.join(args.result_dir, f'list_{args.stat_type}_var_{log_time}.npy'), list_stat_var, allow_pickle=True)
+    # Save as list of arrays to handle different shapes
+    np.save( osp.join(args.result_dir,  f'list_{args.stat_type}_mean_{log_time}.npy'), np.array(list_stat_mean, dtype=object), allow_pickle=True)
+    np.save( osp.join(args.result_dir, f'list_{args.stat_type}_var_{log_time}.npy'), np.array(list_stat_var, dtype=object), allow_pickle=True)
 
     # step1_img_ps = np.load(step1_img_ps_file, allow_pickle=True).item()
 

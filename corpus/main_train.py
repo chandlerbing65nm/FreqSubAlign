@@ -1,31 +1,21 @@
 import time
 import os
-# from torch.nn.utils import clip_grad_norm
-# import torch.nn as nn
-# from einops import rearrange
 import os.path as osp
+
 from tensorboardX import SummaryWriter
 import torch.backends.cudnn as cudnn
 import torch
-# from datasets_.dataset import MyTSNDataset
-# from datasets_.video_dataset import MyTSNVideoDataset, MyVideoDataset
 
-# from models.r2plus1d import MyR2plus1d
-# from models import i3d
-# from models.i3d_incep import InceptionI3d
-# from models.tanet_models.tanet import TSN
 from utils.transforms import *
-from utils.utils_ import  make_dir, path_logger, model_analysis, \
-    adjust_learning_rate, save_checkpoint
-# from utils.BNS_utils import BN3DFeatureHook, choose_BN_layers
-# import baselines.tent as tent
-from corpus.training import train, validate, validate_brief
-from corpus.test_time_adaptation import tta_standard, evaluate_baselines
-from corpus.dataset_utils import get_dataset, get_dataset_tanet, get_dataset_videoswin
-from corpus.model_utils import get_model
-from corpus.statistics_utils import compute_statistics, compute_cos_similarity, load_precomputed_statistics
+from utils.utils_ import  make_dir, path_logger, model_analysis, adjust_learning_rate, save_checkpoint
 
+from corpus.training import train, validate
+from corpus.dataset_utils import get_dataset
+from corpus.model_utils import get_model
 from config import device
+
+
+
 
 def main_train(args=None, best_prec1=0, ):
     log_time = time.strftime("%Y%m%d_%H%M%S")
@@ -39,14 +29,8 @@ def main_train(args=None, best_prec1=0, ):
 
     if args.dataset == 'ucf101':
         num_classes = 101
-    elif args.dataset == 'hmdb51':
-        num_classes = 51
-    elif args.dataset == 'kinetics':
-        num_classes = 400
-    elif args.dataset == 'kth':
-        num_classes = 6
-    elif args.dataset in ['u2h', 'h2u']:
-        num_classes = 12
+    elif args.dataset == 'uffia':
+        num_classes = 4
     else:
         raise ValueError('Unknown dataset ' + args.dataset)
 

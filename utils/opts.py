@@ -132,6 +132,8 @@ parser.add_argument('--momentum', default=0.9, type=float,
                     help='momentum')
 parser.add_argument('--weight-decay', '--wd', default=5e-4, type=float,
                     help='weight decay (default: 5e-4)')
+parser.add_argument('--resume', default='', type=str, metavar='PATH',
+                    help='path to latest checkpoint (default: none)')
 
 def get_opts():
     args = parser.parse_args()

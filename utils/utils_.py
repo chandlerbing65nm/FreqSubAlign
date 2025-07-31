@@ -246,7 +246,10 @@ def accuracy(output: torch.Tensor, target: torch.Tensor, topk: tuple = (1,)) -> 
         List of accuracy values for each k in topk
     """
     with torch.no_grad():
-        maxk = max(topk)
+        num_classes = output.size(1)
+        # Adjust topk values to not exceed number of classes
+        adjusted_topk = tuple(min(k, num_classes) for k in topk)
+        maxk = max(adjusted_topk)
         batch_size = target.size(0)
 
         # Get top-k predictions
