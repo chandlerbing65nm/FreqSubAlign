@@ -60,7 +60,7 @@ def main():
     args.dataset = 'uffia'
     args.video_data_dir = '/scratch/project_465001897/datasets/uffia/video'
     args.train_vid_list = '/scratch/project_465001897/datasets/uffia/split/train_rgb_split_1.txt'
-    args.val_vid_list = '/scratch/project_465001897/datasets/uffia/list_video_perturbations/clean.txt'
+    args.val_vid_list = '/scratch/project_465001897/datasets/uffia/split/val_rgb_split_1.txt'
     args.vid_format = '.mp4'
     
     # Training parameters
@@ -90,9 +90,9 @@ def main():
     args.tta = False
     args.evaluate_baselines = False  # Disable baselines for training
     args.baseline = 'source'
-    args.evaluate = True
-    args.resume = '/scratch/project_465001897/datasets/uffia/results/train/tanet_20250731_195801/20250731_195801_uffia_rgb_model_best.pth.tar'
-    
+    args.evaluate = False
+    args.resume = '/scratch/project_465001897/datasets/uffia/results/train/tanet_20250731_195801/20250731_195801_uffia_rgb_checkpoint.pth.tar'
+     
     # Get model-specific configuration
     model_config = get_model_config(args.arch, args.dataset)
     if not args.model_path:

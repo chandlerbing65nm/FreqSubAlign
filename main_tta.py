@@ -137,9 +137,11 @@ def get_model_config(arch, dataset='somethingv2', tta_mode=True):
                 
         elif dataset == 'uffia':
             config.update({
-                'model_path': '/scratch/project_465001897/datasets/uffia/results/train/tanet_20250731_195801/20250731_195801_uffia_rgb_model_best.pth.tar',
+                'model_path': '/scratch/project_465001897/datasets/uffia/model_tanet/20250731_195801_uffia_rgb_model_best.pth.tar',
                 'additional_args': {
                     **common_args,
+                    'tsn_style': True,
+                    'input_size': 224,
                     'clip_length': 16,
                 }
             })
@@ -149,7 +151,7 @@ def get_model_config(arch, dataset='somethingv2', tta_mode=True):
                     'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/uffia/source_statistics_tanet/list_spatiotemp_var_20250801_135307.npy',
                     'additional_args': {
                         **config['additional_args'],
-                        'lr': 1e-3
+                        'lr': 5e-5
                     }
                 })
     
@@ -173,7 +175,7 @@ if __name__ == '__main__':
     args.dataset = 'uffia'  # somethingv2, ucf101, uffia
     
     # Choose evaluation mode (TTA or source-only)
-    args.tta = True  # Set to False for source-only evaluation
+    args.tta = False  # Set to False for source-only evaluation
     
     # Get model configuration based on architecture and dataset
     model_config = get_model_config(args.arch, args.dataset, tta_mode=args.tta)
@@ -197,7 +199,13 @@ if __name__ == '__main__':
     
     # Set up corruption types to evaluate
     corruptions = ['clean']  # Default to clean, can be expanded to include other corruptions
-    
+
+    # corruptions = [
+    #     'gauss_shuffled', 'pepper_shuffled', 'salt_shuffled', 'shot_shuffled',
+    #     'zoom_shuffled', 'impulse_shuffled', 'defocus_shuffled', 'motion_shuffled',
+    #     'jpeg_shuffled', 'contrast_shuffled', 'rain_shuffled', 'h265_abr_shuffled',  
+    # ]
+
     # Set up result directory based on evaluation mode
     if args.tta:
         parent_result_dir = f'/scratch/project_465001897/datasets/uffia/results/corruptions/{args.arch}_{args.dataset}'

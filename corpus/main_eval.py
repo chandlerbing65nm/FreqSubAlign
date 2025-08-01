@@ -106,10 +106,17 @@ def eval(args=None, model = None ):
         # evaluate baselines
         if args.baseline == 'source': #  source only evaluation
             if args.arch == 'tanet':
-                val_loader = torch.utils.data.DataLoader(
-                    get_dataset_tanet(args,  split='val', dataset_type='eval'),
-                    batch_size=args.batch_size, shuffle=False,
-                    num_workers=args.workers, pin_memory=True, )
+                if args.dataset == 'uffia':
+                    val_loader = torch.utils.data.DataLoader(
+                        get_dataset(args, split='val'),
+                        batch_size=args.batch_size, shuffle=False,
+                        num_workers=args.workers, pin_memory=True
+                    )
+                else:
+                    val_loader = torch.utils.data.DataLoader(
+                        get_dataset_tanet(args,  split='val', dataset_type='eval'),
+                        batch_size=args.batch_size, shuffle=False,
+                        num_workers=args.workers, pin_memory=True, )
 
             elif args.arch == 'videoswintransformer':
                 val_loader = torch.utils.data.DataLoader(
@@ -132,10 +139,17 @@ def eval(args=None, model = None ):
         elif args.baseline == 'norm':
 
             if args.arch == 'tanet':
-                val_loader = torch.utils.data.DataLoader(
-                    get_dataset_tanet(args, split='val'),
-                    batch_size=args.batch_size, shuffle=False,
-                    num_workers=args.workers, pin_memory=True, )
+                if args.dataset == 'uffia':
+                    val_loader = torch.utils.data.DataLoader(
+                        get_dataset(args, split='val'),
+                        batch_size=args.batch_size, shuffle=False,
+                        num_workers=args.workers, pin_memory=True
+                    )
+                else:
+                    val_loader = torch.utils.data.DataLoader(
+                        get_dataset_tanet(args, split='val'),
+                        batch_size=args.batch_size, shuffle=False,
+                        num_workers=args.workers, pin_memory=True, )
             else:
                 val_loader = torch.utils.data.DataLoader(
                     get_dataset(args, split='val'),
@@ -149,10 +163,17 @@ def eval(args=None, model = None ):
         elif args.baseline == 'tent':
 
             if args.arch == 'tanet':
-                val_loader = torch.utils.data.DataLoader(
-                    get_dataset_tanet(args,  split='val'),
-                    batch_size=args.batch_size, shuffle=False,
-                    num_workers=args.workers, pin_memory=True, )
+                if args.dataset == 'uffia':
+                    val_loader = torch.utils.data.DataLoader(
+                        get_dataset(args, split='val'),
+                        batch_size=args.batch_size, shuffle=False,
+                        num_workers=args.workers, pin_memory=True
+                    )
+                else:
+                    val_loader = torch.utils.data.DataLoader(
+                        get_dataset_tanet(args,  split='val'),
+                        batch_size=args.batch_size, shuffle=False,
+                        num_workers=args.workers, pin_memory=True, )
             else:
                 val_loader = torch.utils.data.DataLoader(
                     get_dataset(args, split='val'),
@@ -166,10 +187,17 @@ def eval(args=None, model = None ):
 
         elif args.baseline == 'shot':
             if args.arch == 'tanet':
-                val_loader = torch.utils.data.DataLoader(
-                    get_dataset_tanet(args, split='val'),
-                    batch_size=args.batch_size, shuffle=False,
-                    num_workers=args.workers, pin_memory=True, )
+                if args.dataset == 'uffia':
+                    val_loader = torch.utils.data.DataLoader(
+                        get_dataset(args, split='val'),
+                        batch_size=args.batch_size, shuffle=False,
+                        num_workers=args.workers, pin_memory=True
+                    )
+                else:
+                    val_loader = torch.utils.data.DataLoader(
+                        get_dataset_tanet(args, split='val'),
+                        batch_size=args.batch_size, shuffle=False,
+                        num_workers=args.workers, pin_memory=True, )
             else:
                 val_loader = torch.utils.data.DataLoader(
                     get_dataset(args, split='val'),
@@ -215,10 +243,17 @@ def eval(args=None, model = None ):
         elif args.baseline == 't3a':
             logger.debug(f'Baseline :::::: {args.baseline}')
             if args.arch == 'tanet':
-                val_loader = torch.utils.data.DataLoader(
-                    get_dataset_tanet(args,  split='val'),
-                    batch_size=args.batch_size, shuffle=False,
-                    num_workers=args.workers, pin_memory=True, )
+                if args.dataset == 'uffia':
+                    val_loader = torch.utils.data.DataLoader(
+                        get_dataset(args, split='val'),
+                        batch_size=args.batch_size, shuffle=False,
+                        num_workers=args.workers, pin_memory=True
+                    )
+                else:
+                    val_loader = torch.utils.data.DataLoader(
+                        get_dataset_tanet(args,  split='val'),
+                        batch_size=args.batch_size, shuffle=False,
+                        num_workers=args.workers, pin_memory=True, )
             else:
                 val_loader = torch.utils.data.DataLoader(
                     get_dataset(args, split='val'),
