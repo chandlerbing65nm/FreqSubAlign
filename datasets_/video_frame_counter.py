@@ -33,7 +33,7 @@ def parse_args():
     parser.add_argument('--ann_root', type=str, default='annotation',
                         help='root directory for annotations')
     parser.add_argument('--phase', type=str, default='train',
-                        choices=['train', 'val'])
+                        choices=['train', 'val', 'test'])
     parser.add_argument('--split', type=int, default=1, choices=[1, 2, 3])
     args = parser.parse_args()
     return args
@@ -270,10 +270,17 @@ def generate_uffia_labels(data_path, ann_path, out_path, frame_counts, split):
         for cat in categories:
             f.write(f'{cat}\n')
     
-    files_input = [osp.join(ann_path, f'trainlist0{split}.txt'),
-                   osp.join(ann_path, f'vallist0{split}.txt')]
-    files_output = [osp.join(out_path, f'train_rgb_split_{split}.txt'),
-                   osp.join(out_path, f'val_rgb_split_{split}.txt')]
+    files_input = [
+        # osp.join(ann_path, f'trainlist0{split}.txt'),
+        # osp.join(ann_path, f'vallist0{split}.txt'),
+        osp.join(ann_path, f'testlist0{split}.txt'),
+                   ]
+
+    files_output = [
+        # osp.join(out_path, f'train_rgb_split_{split}.txt'),
+        # osp.join(out_path, f'val_rgb_split_{split}.txt')
+        osp.join(out_path, f'test_rgb_split_{split}.txt')
+                   ]
 
     for filename_input, filename_output in zip(files_input, files_output):
         output = []
@@ -463,3 +470,7 @@ def main():
 
 if __name__ == "__main__":
     main() 
+
+
+
+# python -m datasets.video_frame_counter /scratch/project_465001897/datasets/uffia/video /scratch/project_465001897/datasets/uffia/split --level 4 --lib opencv --dataset uffia --ann_root /scratch/project_465001897/datasets/uffia/split --phase train --split 1

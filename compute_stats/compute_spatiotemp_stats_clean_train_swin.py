@@ -17,17 +17,11 @@ def set_architecture_params(args):
         elif args.dataset == 'ucf101':
             args.clip_length = 16
             args.window_size = (8, 7, 7)
-        elif args.dataset == 'uffia':
-            args.clip_length = 16
-            args.window_size = (8, 7, 7)
     elif args.arch == 'tanet':
         if args.dataset == 'somethingv2':
             args.clip_length = 8
             args.window_size = (8, 7, 7)
         elif args.dataset == 'ucf101':
-            args.clip_length = 16
-            args.window_size = (8, 7, 7)
-        elif args.dataset == 'uffia':
             args.clip_length = 16
             args.window_size = (8, 7, 7)
     return args

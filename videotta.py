@@ -49,7 +49,6 @@ def get_model_config(arch, dataset='somethingv2'):
         'test_crops': 3,
         'frame_uniform': True,
         'frame_interval': 2,
-        'scale_size': 224,
     }
     
     if arch == 'videoswintransformer':
@@ -67,7 +66,8 @@ def get_model_config(arch, dataset='somethingv2'):
                     'chosen_blocks': ['module.backbone.layers.2', 'module.backbone.layers.3', 'module.backbone.norm'],
                     'lr': 1e-5,  # Swin-UCF
                     'lambda_pred_consis': 0.05,
-                    'momentum_mvg': 0.05
+                    'momentum_mvg': 0.05,
+                    'scale_size': 224,
                 }
             })
         elif dataset == 'somethingv2':
@@ -84,7 +84,8 @@ def get_model_config(arch, dataset='somethingv2'):
                     'chosen_blocks': ['module.backbone.layers.2', 'module.backbone.layers.3', 'module.backbone.norm'],
                     'lr': 1e-5,  # Swin-SS2
                     'lambda_pred_consis': 0.05,
-                    'momentum_mvg': 0.05
+                    'momentum_mvg': 0.05,
+                    'scale_size': 224,
                 }
             })
             
@@ -97,7 +98,7 @@ def get_model_config(arch, dataset='somethingv2'):
                 'additional_args': {
                     **common_args,
                     'clip_length': 8,
-                    'window_size': (8, 7, 7),
+                    'scale_size': 256,
                     'lr': 1e-5  # TANet-SS2
                 }
             })
@@ -109,20 +110,20 @@ def get_model_config(arch, dataset='somethingv2'):
                 'additional_args': {
                     **common_args,
                     'clip_length': 16,
-                    'window_size': (8, 7, 7),
+                    'scale_size': 256,
                     'lr': 5e-5  # TANet-UCF
                 }
             })
         elif dataset == 'uffia':
             config.update({
-                'model_path': '/scratch/project_465001897/datasets/ucf/model_tanet/tanet_ucf.pth.tar',
-                'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet/list_spatiotemp_mean_20220908_235138.npy',
-                'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet/list_spatiotemp_mean_20250529_134901.npy',
+                'model_path': '/scratch/project_465001897/datasets/uffia/results/train/tanet_20250731_195801/20250731_195801_uffia_rgb_model_best.pth.tar',
+                'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/uffia/source_statistics_tanet/list_spatiotemp_mean_20250801_135307.npy',
+                'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/uffia/source_statistics_tanet/list_spatiotemp_var_20250801_135307.npy',
                 'additional_args': {
                     **common_args,
                     'clip_length': 16,
-                    'window_size': (8, 7, 7),
-                    'lr': 5e-5  # TANet-UCF
+                    'scale_size': 256,
+                    'lr': 1e-3  # TANet-UFFIA
                 }
             })
     

@@ -45,16 +45,13 @@ def get_model_config(arch, dataset='somethingv2'):
     
     # Common parameters for both architectures
     common_args = {
-        'batch_size': 1,
         'test_crops': 1,
         'frame_uniform': True,
         'frame_interval': 2,
-        'scale_size': 224,
     }
     
     if arch == 'videoswintransformer':
         config.update({
-            'model_path': '/scratch/project_465001897/datasets/ucf/model_swin/swin_ucf_base_patch244_window877_pretrain_kinetics400_30epoch_lr3e-5.pth',
             'video_data_dir': '',
             'val_vid_list': '',
             'result_dir': '',
@@ -62,53 +59,51 @@ def get_model_config(arch, dataset='somethingv2'):
                 **common_args,
                 'patch_size': (2, 4, 4),
                 'num_clips': 1,
+                'scale_size': 224,
             }
         })
         
         # Set architecture-specific parameters
         if dataset == 'somethingv2':
             config['additional_args'].update({
+                'model_path': '/scratch/project_465001897/datasets/ss2/model_swin/swin_base_patch244_window1677_sthv2.pth',
                 'clip_length': 16,
                 'window_size': (16, 7, 7)
             })
         elif dataset == 'ucf101':
             config['additional_args'].update({
-                'clip_length': 16,
-                'window_size': (8, 7, 7)
-            })
-        elif dataset == 'uffia':
-            config['additional_args'].update({
+                'model_path': '/scratch/project_465001897/datasets/ucf/model_swin/swin_ucf_base_patch244_window877_pretrain_kinetics400_30epoch_lr3e-5.pth',
                 'clip_length': 16,
                 'window_size': (8, 7, 7)
             })
             
     elif arch == 'tanet':
         config.update({
-            'model_path': '/scratch/project_465001897/datasets/ucf/model_tanet/tanet_ucf.pth.tar',
             'video_data_dir': '',
             'val_vid_list': '',
             'result_dir': '',
             'additional_args': {
                 **common_args,
-                'sample_style': 'uniform-1'
+                'sample_style': 'uniform-1',
+                'scale_size': 256,
             }
         })
         
         # Set architecture-specific parameters
         if dataset == 'somethingv2':
             config['additional_args'].update({
+                'model_path': '/scratch/project_465001897/datasets/ss2/source_statistics_tanet/TR50_S2_256_8x3x2.pth.tar',
                 'clip_length': 16,
-                'window_size': (16, 7, 7)
             })
         elif dataset == 'ucf101':
             config['additional_args'].update({
+                'model_path': '/scratch/project_465001897/datasets/ucf/model_tanet/tanet_ucf.pth.tar',
                 'clip_length': 16,
-                'window_size': (8, 7, 7)
             })
         elif dataset == 'uffia':
             config['additional_args'].update({
+                'model_path': '/scratch/project_465001897/datasets/uffia/results/train/tanet_20250731_195801/20250731_195801_uffia_rgb_model_best.pth.tar',
                 'clip_length': 16,
-                'window_size': (8, 7, 7)
             })
     
     return config
@@ -122,7 +117,7 @@ if __name__ == '__main__':
     
     args.gpus = [0]
     args.video_data_dir = '/scratch/project_465001897/datasets/uffia/video'
-    args.batch_size = 1
+    args.batch_size = 36
     args.vid_format = '.mp4' # only for ss2
 
     # Choose model architecture

@@ -36,7 +36,6 @@ def get_model_config(arch, dataset='uffia'):
     if arch == 'videoswintransformer':
         if dataset == 'uffia':
             config.update({
-                'model_path': '/scratch/project_465001897/datasets/ucf/model_swin/swin_ucf_base_patch244_window877_pretrain_kinetics400_30epoch_lr3e-5.pthh',
                 'clip_length': 16,
                 'patch_size': (2, 4, 4),
                 'window_size': (8, 7, 7),
@@ -44,7 +43,6 @@ def get_model_config(arch, dataset='uffia'):
     elif arch == 'tanet':
         if dataset == 'uffia':
             config.update({
-                'model_path': '/scratch/project_465001897/datasets/ucf/model_tanet/tanet_ucf.pth.tar',
                 'clip_length': 16,
             })
     
@@ -62,7 +60,7 @@ def main():
     args.dataset = 'uffia'
     args.video_data_dir = '/scratch/project_465001897/datasets/uffia/video'
     args.train_vid_list = '/scratch/project_465001897/datasets/uffia/split/train_rgb_split_1.txt'
-    args.val_vid_list = '/scratch/project_465001897/datasets/uffia/split/val_rgb_split_1.txt'
+    args.val_vid_list = '/scratch/project_465001897/datasets/uffia/list_video_perturbations/clean.txt'
     args.vid_format = '.mp4'
     
     # Training parameters
@@ -92,7 +90,8 @@ def main():
     args.tta = False
     args.evaluate_baselines = False  # Disable baselines for training
     args.baseline = 'source'
-    args.evaluate = False
+    args.evaluate = True
+    args.resume = '/scratch/project_465001897/datasets/uffia/results/train/tanet_20250731_195801/20250731_195801_uffia_rgb_model_best.pth.tar'
     
     # Get model-specific configuration
     model_config = get_model_config(args.arch, args.dataset)
