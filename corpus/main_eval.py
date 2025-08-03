@@ -35,10 +35,10 @@ def eval(args=None, model = None ):
     make_dir(args.result_dir)
     logger = path_logger(args.result_dir, log_time)
     # writer = SummaryWriter(log_dir=osp.join(result_dir, f'{log_time}_tb'))
-    if args.verbose:
-        for arg in dir(args):
-            if arg[0] != '_':
-                logger.debug(f'{arg} {getattr(args, arg)}')
+    # if args.verbose:
+    #     for arg in dir(args):
+    #         if arg[0] != '_':
+    #             logger.debug(f'{arg} {getattr(args, arg)}')
     num_class_dict = {
         'uffia' : 4,
         'ucf101' : 101,

@@ -91,7 +91,7 @@ def main():
     args.evaluate_baselines = False  # Disable baselines for training
     args.baseline = 'source'
     args.evaluate = False
-    args.resume = '/scratch/project_465001897/datasets/uffia/results/train/tanet_20250731_195801/20250731_195801_uffia_rgb_checkpoint.pth.tar'
+    args.resume = '/scratch/project_465001897/datasets/uffia/results/train/tanet_20250801_200905/20250801_200905_uffia_rgb_checkpoint.pth.tar'
      
     # Get model-specific configuration
     model_config = get_model_config(args.arch, args.dataset)
