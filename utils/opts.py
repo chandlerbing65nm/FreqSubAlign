@@ -21,7 +21,7 @@ parser.add_argument('--dataset', type=str, default='ucf101',
 parser.add_argument('--modality', type=str, default='RGB')
 parser.add_argument('--root_path', default='None', type=str)
 parser.add_argument('--video_data_dir', type=str,
-                    default='/home/ivanl/data/UCF-HMDB/video_pertubations/UCF101/level_5_ucf_val_split_1',
+                    default='',
                     help='directory of the corrupted videos')
 parser.add_argument('--vid_format', default='', type=str,
                     help='video format if not specified in filenames')
@@ -29,16 +29,16 @@ parser.add_argument('--datatype', default='vid', type=str, choices=['vid', 'fram
 
 # ========================= Statistics Files ==========================
 parser.add_argument('--spatiotemp_mean_clean_file', type=str,
-                    default='/home/ivanl/data/UCF-HMDB/UCF-HMDB_all/corruptions_results/source/tanet_ucf101/compute_norm_spatiotempstats_clean_train_bn2d/list_spatiotemp_mean_20220908_235138.npy',
+                    default='',
                     help='spatiotemporal statistics - mean')
 parser.add_argument('--spatiotemp_var_clean_file', type=str,
-                    default='/home/ivanl/data/UCF-HMDB/UCF-HMDB_all/corruptions_results/source/tanet_ucf101/compute_norm_spatiotempstats_clean_train_bn2d/list_spatiotemp_var_20220908_235138.npy',
+                    default='',
                     help='spatiotemporal statistics - variance')
 parser.add_argument('--val_vid_list', type=str,
-                    default='/home/ivanl/data/UCF-HMDB/video_pertubations/UCF101/list_video_perturbations/{}.txt',
+                    default='',
                     help='list of corrupted videos to adapt to')
 parser.add_argument('--result_dir', type=str,
-                    default='/home/ivanl/data/UCF-HMDB/UCF-HMDB_all/corruptions_results/source/{}_{}/tta_{}',
+                    default='',
                     help='result directory')
 
 # ========================= Model Configuration ==========================
@@ -46,7 +46,7 @@ parser.add_argument('--arch', type=str, default='tanet',
                     choices=['tanet', 'videoswintransformer'],
                     help='network architecture')
 parser.add_argument('--model_path', type=str,
-                    default='/home/ivanl/data/DeepInversion_results/train_models/models/UCF/tanet/20220815_122340_ckpt.pth.tar')
+                    default='')
 parser.add_argument('--img_feature_dim', type=int, default=256,
                     help='dimension of image feature on ResNet50')
 parser.add_argument('--partial_bn', action='store_true')
@@ -72,7 +72,7 @@ parser.add_argument('--debug', action='store_true',
                     help='if debug, loading only the first 50 videos in the list')
 parser.add_argument('--verbose', type=bool, default=True,
                     help='more details in the logging file')
-parser.add_argument('--print-freq', '-p', default=5, type=int,
+parser.add_argument('--print-freq', '-p', default=20, type=int,
                     help='print frequency (default: 5)')
 
 # ========================= Test-Time Adaptation Configuration ==========================

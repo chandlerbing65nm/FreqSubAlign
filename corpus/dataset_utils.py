@@ -36,6 +36,10 @@ import os.path as osp
 from utils.pred_consistency_utils import compute_pred_consis
 import copy as cp
 
+from models.tanet_models.transforms import GroupFullResSample_TANet, GroupScale_TANet, GroupCenterCrop_TANet, Stack_TANet, ToTorchFormatTensor_TANet, \
+    GroupNormalize_TANet, GroupMultiScaleCrop_TANet, SubgroupWise_MultiScaleCrop_TANet, SubgroupWise_RandomHorizontalFlip_TANet
+from models.tanet_models.video_dataset import Video_TANetDataSet
+
 # from corpus.training import train, validate, validate_brief
 # from corpus.test_time_adaptation import tta_standard, test_time_adapt, evaluate_baselines
 # from corpus.model_utils import get_model
@@ -61,6 +65,7 @@ def get_dataset(args, split='train'):
         fromListToTorchFormatTensor(clip_len=args.clip_length, num_clips=args.num_clips),
         GroupNormalize(args.input_mean, args.input_std),
     ])
+
     if args.datatype == 'vid':
         if split == 'train':
             if args.tsn_style:  # vid, train, tsn
@@ -138,81 +143,122 @@ def get_dataset(args, split='train'):
                 raise Exception('not implemented yet!')
 
 
+def get_dataset_tanet(args, split='train', dataset_type=None):
+    """
+    Constructs and returns a Video_TANetDataSet for training or validation.
 
-def get_dataset_tanet(args, split = 'train', dataset_type = None):
-    
-    from models.tanet_models.transforms import GroupFullResSample_TANet, GroupScale_TANet, GroupCenterCrop_TANet, Stack_TANet, ToTorchFormatTensor_TANet, \
-        GroupNormalize_TANet, GroupMultiScaleCrop_TANet, SubgroupWise_MultiScaleCrop_TANet, SubgroupWise_RandomHorizontalFlip_TANet
+    Args:
+        args: An object containing various configuration arguments (e.g., clip_length, modality,
+              input_mean, input_std, train_vid_list, val_vid_list, etc.).
+        split (str): Specifies the dataset split ('train' or 'val').
+        dataset_type (str, optional): Further specifies the type of dataset for validation
+                                      ('tta' for Test-Time Augmentation or 'eval' for evaluation).
+
+    Returns:
+        Video_TANetDataSet: An instance of the Video_TANetDataSet configured for the specified split.
+    """
+
+    # Import necessary transformation and dataset classes for TANet models
+    from models.tanet_models.transforms import (
+        GroupFullResSample_TANet, GroupScale_TANet, GroupCenterCrop_TANet,
+        Stack_TANet, ToTorchFormatTensor_TANet, GroupNormalize_TANet,
+        GroupMultiScaleCrop_TANet, SubgroupWise_MultiScaleCrop_TANet,
+        SubgroupWise_RandomHorizontalFlip_TANet
+    )
     from models.tanet_models.video_dataset import Video_TANetDataSet
-    
+
     if split == 'train':
-        raise NotImplementedError('Training dataset processing for TANet to be added!')
+        # --- Training Dataset Configuration ---
+        # Get training augmentation (e.g., GroupMultiScaleCrop, GroupRandomHorizontalFlip)
+        train_augmentation = get_augmentation(args, args.modality, args.input_size)
+
+        # Define the complete transformation pipeline for training data
+        train_transform = torchvision.transforms.Compose([
+            train_augmentation,  # Applies multi-scale cropping and horizontal flipping
+            Stack_TANet(roll=False),  # Stacks frames along a new dimension
+            ToTorchFormatTensor_TANet(div=True),  # Converts to PyTorch tensor format, optionally divides by 255
+            GroupNormalize_TANet(args.input_mean, args.input_std),  # Normalizes pixel values
+        ])
+
+        # Instantiate and return the training dataset
+        return Video_TANetDataSet(
+            args.train_vid_list,
+            num_segments=args.clip_length,
+            new_length=1 if args.modality == "RGB" else 5,  # Length of each segment (e.g., 1 for RGB, 5 for Flow/Audio)
+            modality=args.modality,
+            vid_format=args.vid_format,
+            test_mode=False,  # Indicates training mode
+            remove_missing=False,  # Do not remove missing videos during training
+            transform=train_transform,
+            video_data_dir=args.video_data_dir,
+            test_sample=args.sample_style,  # Sampling style (e.g., 'uniform-x', 'dense-x')
+        )
+
     elif split == 'val':
-        # if args.full_res,  feed 256x256 to the network
-        # input_size = tanet_model.scale_size if args.full_res else tanet_model.input_size
+        # --- Validation Dataset Configuration ---
+        # Determine the input size for the network based on 'full_res' argument
         input_size = args.scale_size if args.full_res else args.input_size
 
+        # Initialize flags for Test-Time Augmentation (TTA)
+        if_sample_tta_aug_views = False
         if dataset_type == 'tta':
             if_sample_tta_aug_views = args.if_sample_tta_aug_views
         elif dataset_type == 'eval':
-            if_sample_tta_aug_views = False
+            if_sample_tta_aug_views = False # Explicitly set to False for 'eval' type
 
+        # Configure TTA-specific parameters if TTA augmentation views are enabled
         tta_view_sample_style_list = args.tta_view_sample_style_list if if_sample_tta_aug_views else None
         n_augmented_views = args.n_augmented_views if if_sample_tta_aug_views else None
         if_spatial_rand_cropping = args.if_spatial_rand_cropping if if_sample_tta_aug_views else False
 
+        # Define the spatial cropping strategy based on 'test_crops' argument
+        cropping = None
         if args.test_crops == 1:
             if if_spatial_rand_cropping:
-                # cropping = torchvision.transforms.Compose([GroupMultiScaleCrop_TANet(input_size)] )
-                cropping = torchvision.transforms.Compose([SubgroupWise_MultiScaleCrop_TANet(input_size=input_size,
-                                                                                             n_temp_clips=n_augmented_views,
-                                                                                             clip_len=args.clip_length)])
-                # label_transforms =  {
-                # 86: 87,
-                # 87: 86,
-                # 93: 94,
-                # 94: 93,
-                # 166: 167,
-                # 167: 166 } if args.dataset == 'somethingv2' else None
-                # cropping = torchvision.transforms.Compose([SubgroupWise_MultiScaleCrop_TANet(input_size=input_size,
-                #                                                                              n_temp_clips=n_augmented_views,
-                #                                                                              clip_len=args.clip_length),
-                #                                            SubgroupWise_RandomHorizontalFlip_TANet(label_transforms= label_transforms,
-                #                                                                                    n_temp_clips=n_augmented_views,
-                #                                                                                    clip_len=args.clip_length)])
+                # For 1 spatial crop with random cropping (used in TTA)
+                cropping = torchvision.transforms.Compose([
+                    SubgroupWise_MultiScaleCrop_TANet(
+                        input_size=input_size,
+                        n_temp_clips=n_augmented_views,
+                        clip_len=args.clip_length
+                    )
+                ])
             else:
-                cropping = torchvision.transforms.Compose([  # scale to scale_size, then center crop to input_size
-                    GroupScale_TANet(args.scale_size), # scale size is 256, input_size is 224, todo here scale_size is the size of the smaller edge
-                    GroupCenterCrop_TANet(input_size),
+                # For 1 spatial crop (center crop)
+                cropping = torchvision.transforms.Compose([
+                    GroupScale_TANet(args.scale_size),  # Scale the shorter edge to scale_size
+                    GroupCenterCrop_TANet(input_size),  # Center crop to input_size
                 ])
         elif args.test_crops == 3:
-            cropping = torchvision.transforms.Compose([GroupFullResSample_TANet(input_size, args.scale_size, flip=False)])
+            # For 3 spatial crops (left, center, right)
+            cropping = torchvision.transforms.Compose([
+                GroupFullResSample_TANet(input_size, args.scale_size, flip=False)
+            ])
         else:
             raise NotImplementedError(f'{args.test_crops} spatial crops not implemented!')
 
-
-
+        # Instantiate and return the validation dataset
         return Video_TANetDataSet(
             args.val_vid_list,
             num_segments=args.clip_length,
             new_length=1 if args.modality == "RGB" else 5,
             modality=args.modality,
-            # image_tmpl=prefix,
             vid_format=args.vid_format,
-            test_mode=True,
-            remove_missing= True,
+            test_mode=True,  # Indicates test/validation mode
+            remove_missing=True,  # Remove missing videos during validation
             transform=torchvision.transforms.Compose([
-                cropping,   #  GroupFullResSample,  scale to scale size, and crop  left, right, center  3 spatial crops    10 temporal clips,  16 frames,     480 frames in total   256 256
-                Stack_TANet(roll=False),  #  stack the temporal dimension into channel dimension,   (*, C, T, H, W) -> (*, C*T, H, W)   ( *,   480*3, 256, 256)
-                ToTorchFormatTensor_TANet(div= True),  # todo divide by 255   [0.485, 0.456, 0.406] * 255 = [123.675, 116.28, 103.53]      [0.229, 0.224, 0.225] * 255= [58.395,57.12, 57.375]
-                GroupNormalize_TANet(args.input_mean, args.input_std),
+                cropping,  # Applies the selected spatial cropping strategy
+                Stack_TANet(roll=False),  # Stacks frames along a new dimension
+                ToTorchFormatTensor_TANet(div=True),  # Converts to PyTorch tensor format, divides by 255
+                GroupNormalize_TANet(args.input_mean, args.input_std),  # Normalizes pixel values
             ]),
             video_data_dir=args.video_data_dir,
-            test_sample=args.sample_style, #  'uniform-x' or 'dense-x'
+            test_sample=args.sample_style,  # Sampling style (e.g., 'uniform-x', 'dense-x')
             debug=args.debug,
-            if_sample_tta_aug_views= if_sample_tta_aug_views,
+            if_sample_tta_aug_views=if_sample_tta_aug_views,
             tta_view_sample_style_list=tta_view_sample_style_list,
-            n_tta_aug_views=n_augmented_views)
+            n_tta_aug_views=n_augmented_views
+        )
 
 
 

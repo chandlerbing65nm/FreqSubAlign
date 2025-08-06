@@ -10,7 +10,7 @@ from utils.transforms import *
 from utils.utils_ import  make_dir, path_logger, model_analysis, adjust_learning_rate, save_checkpoint
 
 from corpus.training import train, validate
-from corpus.dataset_utils import get_dataset
+from corpus.dataset_utils import get_dataset, get_dataset_tanet
 from corpus.model_utils import get_model
 from config import device
 
@@ -24,8 +24,8 @@ def main_train(args=None, best_prec1=0, ):
     logger = path_logger(args.result_dir, log_time)
     writer = SummaryWriter(log_dir=osp.join(args.result_dir, f'{log_time}_tb'))
 
-    for arg in dir(args):
-        logger.debug(f'{arg} {getattr(args, arg)}')
+    import pprint
+    logger.debug('Arguments:\n' + pprint.pformat(vars(args)))
 
     if args.dataset == 'ucf101':
         num_classes = 101
@@ -38,7 +38,6 @@ def main_train(args=None, best_prec1=0, ):
 
     if args.verbose:
         model_analysis(model, logger)
-    args.crop_size = args.input_size
 
     if args.modality == 'Flow':
         args.input_mean = [0.5]
@@ -63,17 +62,29 @@ def main_train(args=None, best_prec1=0, ):
 
     cudnn.benchmark = True
 
-    # Data loading code
-    train_loader = torch.utils.data.DataLoader(  # TSN video dataset
-        get_dataset(args, split='train'),
-        batch_size=args.batch_size, shuffle=True,
-        num_workers=args.workers, pin_memory=True, )
+    # # Data loading code
+    # train_loader = torch.utils.data.DataLoader(
+    #     get_dataset_uffia(args, split='train'),
+    #     batch_size=args.batch_size, shuffle=True,
+    #     num_workers=args.workers, pin_memory=True, )
 
-    val_loader = torch.utils.data.DataLoader(
-        get_dataset(args, split='val'),
-        batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True
-    )
+    # val_loader = torch.utils.data.DataLoader(
+    #     get_dataset_uffia(args, split='val'),
+    #     batch_size=args.batch_size, shuffle=False,
+    #     num_workers=args.workers, pin_memory=True
+    # )
+
+    if args.arch == 'tanet':
+        train_loader = torch.utils.data.DataLoader(
+            get_dataset_tanet(args,  split='train'),
+            batch_size=args.batch_size, shuffle=True,
+            num_workers=args.workers, pin_memory=True, )
+
+        val_loader = torch.utils.data.DataLoader(
+            get_dataset_tanet(args,  split='val', dataset_type='eval'),
+            batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers, pin_memory=True, )
+
 
     # define loss function (criterion) and optimizer
     if args.loss_type == 'nll':

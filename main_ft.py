@@ -43,7 +43,7 @@ def get_model_config(arch, dataset='uffia'):
     elif arch == 'tanet':
         if dataset == 'uffia':
             config.update({
-                'clip_length': 16,
+                'clip_length': 8,
             })
     
     return config
@@ -64,7 +64,7 @@ def main():
     args.vid_format = '.mp4'
     
     # Training parameters
-    args.epochs = 50
+    args.epochs = 30
     args.batch_size = 24
     args.lr = 1e-3
     args.momentum = 0.9
@@ -76,14 +76,15 @@ def main():
     args.snapshot_pref = args.dataset
     
     # Data processing parameters
-    args.clip_length = 16
+    args.clip_length = 8
+    args.test_crops = 3
+    args.num_clips = 1
     args.scale_size = 256
+    args.crop_size = 256
     args.input_size = 224
     args.frame_uniform = True
     args.frame_interval = 2
-    args.test_crops = 1  # Use single crop for training validation
     args.sample_style = 'uniform-1'  # TANet: single clip
-    args.num_clips = 1  # Video Swin: single clip
     args.tsn_style = True
     
     # Disable TTA-related functionality
@@ -91,8 +92,8 @@ def main():
     args.evaluate_baselines = False  # Disable baselines for training
     args.baseline = 'source'
     args.evaluate = False
-    args.resume = '/scratch/project_465001897/datasets/uffia/results/train/tanet_20250801_200905/20250801_200905_uffia_rgb_checkpoint.pth.tar'
-     
+    # args.resume = '/scratch/project_465001897/datasets/uffia/results/train/tanet_20250804_122241/20250804_122241_uffia_rgb_checkpoint.pth.tar'
+    
     # Get model-specific configuration
     model_config = get_model_config(args.arch, args.dataset)
     if not args.model_path:
@@ -100,24 +101,7 @@ def main():
     
     # Create result directory
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    args.result_dir = f'/scratch/project_465001897/datasets/uffia/results/train/{args.arch}_{timestamp}'
-    
-    print(f"Training configuration:")
-    print(f"  Architecture: {args.arch}")
-    print(f"  Dataset: {args.dataset}")
-    print(f"  Epochs: {args.epochs}")
-    print(f"  Batch size: {args.batch_size}")
-    print(f"  Learning rate: {args.lr}")
-    print(f"  Momentum: {args.momentum}")
-    print(f"  Weight decay: {args.weight_decay}")
-    print(f"  Model path: {args.model_path}")
-    print(f"  Results dir: {args.result_dir}")
-    print(f"  Video dir: {args.video_data_dir}")
-    print(f"  Train list: {args.train_vid_list}")
-    print(f"  Val list: {args.val_vid_list}")
-    print(f"  Clip length: {args.clip_length}")
-    print(f"  Scale size: {args.scale_size}")
-    print(f"  Input size: {args.input_size}")
+    args.result_dir = f'/scratch/project_465001897/datasets/uffia/model_tanet/{args.arch}_{timestamp}'
     
     # Start training
     main_train(args)

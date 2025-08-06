@@ -123,7 +123,9 @@ def validate(val_loader, model, criterion, iter, epoch=None, args=None, logger=N
                 actual_bz = input.shape[0]
                 input = input.to(device)
                 if args.arch == 'tanet':
-                    input = input.view(-1, 3, args.clip_length, input.size(-2), input.size(-1))
+                    input = input.view(-1, 3, input.size(2), input.size(3))
+                    input = input.view(actual_bz * args.test_crops * n_clips,
+                                       args.clip_length, 3, input.size(2), input.size(3))
                     _ = forward_and_adapt(input, model, optimizer, args, actual_bz, n_clips)
                 else:
                     input = input.reshape((-1,) + input.shape[2:])
@@ -136,7 +138,9 @@ def validate(val_loader, model, criterion, iter, epoch=None, args=None, logger=N
                     actual_bz = input.shape[0]
                     input = input.to(device)
                     if args.arch == 'tanet':
-                        input = input.view(-1, 3, args.clip_length, input.size(-2), input.size(-1))
+                        input = input.view(-1, 3, input.size(2), input.size(3))
+                        input = input.view(actual_bz * args.test_crops * n_clips,
+                                           args.clip_length, 3, input.size(2), input.size(3))
                         _ = model(input)
                     else:
                         input = input.reshape((-1,) + input.shape[2:])
@@ -155,14 +159,14 @@ def validate(val_loader, model, criterion, iter, epoch=None, args=None, logger=N
             input = input.to(device)
             target = target.to(device)
             if args.arch == 'tanet':
-                # Input format: (actual_bz, n_views, C, T, H, W) = [24, 1, 3, 16, 224, 224]
-                # Reshape to: (actual_bz * n_views, C, T, H, W) for TANet
-                input = input.view(-1, 3, args.clip_length, input.size(-2), input.size(-1))
-                
-                output = model(input)  # (actual_bz * n_views, n_class)
-                
-                # Average across views: reshape back to (actual_bz, n_views, n_class) then mean
-                output = output.view(actual_bz, args.test_crops * n_clips, -1).mean(1)
+                # (actual_bz,    C* spatial_crops * temporal_clips* clip_len, 256, 256) ->   (actual_bz * spatial_crops * temporal_clips* clip_len,  C, 256, 256)
+                input = input.view(-1, 3, input.size(2), input.size(3))
+                input = input.view(actual_bz * args.test_crops * n_clips,
+                                       args.clip_length, 3, input.size(2),input.size(3))  # (actual_bz * spatial_crops * temporal_clips* clip_len,  C, 256, 256) -> (actual_bz * spatial_crops * temporal_clips,  clip_len,  C, 256, 256)
+
+                output = model(input) #  (actual_bz * spatial_crops * temporal_clips,         clip_len,  C, 256, 256)   ->     (actual_bz * spatial_crops * temporal_clips,       n_class )
+                # take the average among all spatial_crops * temporal_clips,   (actual_bz * spatial_crops * temporal_clips,       n_class )  ->   (actual_bz,       n_class )
+                output = output.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
             elif args.arch == 'videoswintransformer':
                 # the format shape is N C T H W
                 # (actual_bz,   C* spatial_crops * temporal_clips* clip_len,    256,     256)   -> (batch, n_views, C, T, H, W)
@@ -241,14 +245,13 @@ def validate_brief(eval_loader, model, global_iter, epoch=None, args=None, logge
             input = input.to(device)
             target = target.to(device)
             if args.arch == 'tanet':
-                # Input format: (actual_bz, n_views, C, T, H, W) = [24, 1, 3, 16, 224, 224]
-                # Reshape to: (actual_bz * n_views, C, T, H, W) for TANet
-                input = input.view(-1, 3, args.clip_length, input.size(-2), input.size(-1))
-                
-                output = model(input)  # (actual_bz * n_views, n_class)
-                
-                # Average across views: reshape back to (actual_bz, n_views, n_class) then mean
-                output = output.view(actual_bz, args.test_crops * n_clips, -1).mean(1)
+                # (actual_bz, C* spatial_crops * temporal_clips* clip_len, 256, 256) ->   (actual_bz * spatial_crops * temporal_clips* clip_len,  C, 256, 256)
+                input = input.view(-1, 3, input.size(2), input.size(3))
+                input = input.view(actual_bz * args.test_crops * n_clips,
+                                       args.clip_length, 3, input.size(2),input.size(3))  # (actual_bz * spatial_crops * temporal_clips* clip_len,  C, 256, 256) -> (actual_bz * spatial_crops * temporal_clips,  clip_len,  C, 256, 256)
+                output = model(input) #  (actual_bz * spatial_crops * temporal_clips,         clip_len,  C, 256, 256)   ->     (actual_bz * spatial_crops * temporal_clips,       n_class )
+                # take the average among all spatial_crops * temporal_clips,   (actual_bz * spatial_crops * temporal_clips,       n_class )  ->   (actual_bz,       n_class )
+                output = output.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
             elif args.arch == 'videoswintransformer':
                 # the format shape is N C T H W         if  collapse in datsaet is True, then shape is  (actual_bz,   C* spatial_crops * temporal_clips* clip_len,    256,     256)
                 # (batch, n_views, C, T, H, W)

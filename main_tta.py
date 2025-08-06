@@ -37,7 +37,6 @@ def get_model_config(arch, dataset='somethingv2', tta_mode=True):
     
     # Common parameters for both architectures
     common_args = {
-        'test_crops': 3 if tta_mode else 1,  # Use more crops for TTA
         'frame_uniform': True,
         'frame_interval': 2,
     }
@@ -137,21 +136,24 @@ def get_model_config(arch, dataset='somethingv2', tta_mode=True):
                 
         elif dataset == 'uffia':
             config.update({
-                'model_path': '/scratch/project_465001897/datasets/uffia/model_tanet/20250731_195801_uffia_rgb_model_best.pth.tar',
+                'model_path': '/scratch/project_465001897/datasets/uffia/model_tanet/20250805_221622_uffia_rgb_model_best.pth.tar',
                 'additional_args': {
                     **common_args,
                     'tsn_style': True,
                     'input_size': 224,
-                    'clip_length': 16,
+                    'clip_length': 8,
                 }
             })
             if tta_mode:
                 config.update({
-                    'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/uffia/source_statistics_tanet/list_spatiotemp_mean_20250801_135307.npy',
-                    'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/uffia/source_statistics_tanet/list_spatiotemp_var_20250801_135307.npy',
+                    'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/uffia/source_statistics_tanet/list_spatiotemp_mean_20250805_200521.npy',
+                    'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/uffia/source_statistics_tanet/list_spatiotemp_var_20250805_200521.npy',
                     'additional_args': {
                         **config['additional_args'],
-                        'lr': 5e-5
+                        'lr': 1e-6,
+                        'lambda_pred_consis': 0.05,
+                        'momentum_mvg': 0.07,
+                        'momentum_bns': 0.1,
                     }
                 })
     
@@ -164,15 +166,9 @@ if __name__ == '__main__':
     # Set seed for reproducibility
     set_seed(142)
     
-    # Default arguments
-    args.gpus = [0]
-    args.video_data_dir = '/scratch/project_465001897/datasets/ss2/val_corruptions'
-    args.batch_size = 1  # Default to 1 for TTA, can be overridden
-    args.vid_format = '.mp4'  # Only for somethingv2
-    
     # Choose model architecture and dataset
     args.arch = 'tanet'  # videoswintransformer, tanet
-    args.dataset = 'somethingv2'  # somethingv2, ucf101, uffia
+    args.dataset = 'ucf101'  # somethingv2, ucf101, uffia
     
     # Choose evaluation mode (TTA or source-only)
     args.tta = True  # Set to False for source-only evaluation
@@ -196,20 +192,43 @@ if __name__ == '__main__':
     # Set additional arguments for the selected architecture
     for key, value in model_config['additional_args'].items():
         setattr(args, key, value)
-    
+
+    # Critical arguments
+    args.clip_length = 16
+    args.test_crops = 3
+    args.num_clips = 1
+    args.scale_size = 256
+    # args.crop_size = 224
+    args.input_size = 224
+
+    # Default arguments
+    args.gpus = [0]
+    args.video_data_dir = '/scratch/project_465001897/datasets/ucf/val_corruptions'
+    args.batch_size = 1  # Default to 1 for TTA, can be overridden
+    # args.vid_format = '.mp4'  # Only for somethingv2
+
     # Set up corruption types to evaluate
     corruptions = [
-        'gauss', 'pepper', 'salt', 'shot',
-        'zoom', 'impulse', 'defocus', 'motion',
-        'jpeg', 'contrast', 'rain', 'h265_abr'
+        # 'gauss', 
+        # 'pepper', 
+        # 'salt', 
+        # 'shot',
+        # 'zoom', 
+        # 'impulse', 
+        # 'defocus', 
+        # 'motion',
+        'jpeg', 
+        'contrast', 
+        'rain', 
+        'h265_abr'
         ]
 
     # Set up result directory based on evaluation mode
     if args.tta:
-        parent_result_dir = f'/scratch/project_465001897/datasets/ss2/results/corruptions/{args.arch}_{args.dataset}'
+        parent_result_dir = f'/scratch/project_465001897/datasets/ucf/results/corruptions/{args.arch}_{args.dataset}'
         result_prefix = 'tta_'
     else:
-        parent_result_dir = f'/scratch/project_465001897/datasets/ss2/results/source/{args.arch}_{args.dataset}'
+        parent_result_dir = f'/scratch/project_465001897/datasets/ucf/results/source/{args.arch}_{args.dataset}'
         result_prefix = 'source_'
     
     # Create parent results directory
@@ -225,7 +244,7 @@ if __name__ == '__main__':
         print(f'#### Starting Evaluation for ::: {args.corruptions} corruption ####')
         
         # Set up file paths
-        args.val_vid_list = f'/scratch/project_465001897/datasets/ss2/list_video_perturbations/{args.corruptions}.txt'
+        args.val_vid_list = f'/scratch/project_465001897/datasets/ucf/list_video_perturbations/{args.corruptions}.txt'
         args.result_dir = os.path.join(parent_result_dir, f'{result_prefix}{args.corruptions}')
         
         # Print verbose arguments for each corruption if verbose is enabled

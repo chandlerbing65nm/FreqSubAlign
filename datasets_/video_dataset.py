@@ -31,7 +31,7 @@ class MyVideoDataset(data.Dataset):
     """
     sample several clips of consecutive frames
     """
-    def __init__(self, root_path, list_file, clip_length=64, frame_interval=1, num_clips=1, frame_size=(320, 240),
+    def __init__(self, args, root_path, list_file, clip_length=64, frame_interval=1, num_clips=1, frame_size=(320, 240),
                  modality='RGB', vid_format='.mp4',
                  transform=None, test_mode=False, video_data_dir=None, debug=False, debug_vid=50):
         self.root_path = root_path
@@ -50,6 +50,7 @@ class MyVideoDataset(data.Dataset):
 
         self.debug = debug
         self.debug_vid = debug_vid
+        self.args = args
 
         self._parse_list()
 
@@ -92,7 +93,7 @@ class MyVideoDataset(data.Dataset):
             ratio = (num_frames - ori_clip_len + 1.0) / self.num_clips
             clip_offsets = np.around(np.arange(self.num_clips) * ratio)
         else:
-            clip_offsets = np.zeros((self.num_clips,), dtype=np.int)
+            clip_offsets = np.zeros((self.num_clips,), dtype=np.int32)
         return clip_offsets
 
     def _get_test_clips(self, num_frames):  # uniformly sample the starting position of each clip
@@ -100,9 +101,9 @@ class MyVideoDataset(data.Dataset):
         avg_interval = (num_frames - ori_clip_len + 1) / float(self.num_clips)
         if num_frames > ori_clip_len - 1:
             base_offsets = np.arange(self.num_clips) * avg_interval
-            clip_offsets = (base_offsets + avg_interval / 2.0).astype(np.int)
+            clip_offsets = (base_offsets + avg_interval / 2.0).astype(np.int32)
         else:
-            clip_offsets = np.zeros((self.num_clips,), dtype=np.int)
+            clip_offsets = np.zeros((self.num_clips,), dtype=np.int32)
         return clip_offsets
 
     def _sample_clips(self, num_frames):

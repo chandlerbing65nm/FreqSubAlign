@@ -180,6 +180,7 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                 # bn_layers = [nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d]
                 bn_layers = [nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d]
                 chosen_layers = choose_layers(model, bn_layers)
+
             elif args.arch == 'videoswintransformer':
                 # todo   on Video Swin Transformer,
                 #     statistics are computed on all LayerNorm layers (feature in shape BTHWC), except for the first LayerNorm after Conv3D (feature in shape B,combined_dim,C)
@@ -207,6 +208,20 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
             # todo ############################################################
             # todo ##################################### initialize hooks to the chosen layers for computing statistics, initialize average meter
             # todo ############################################################
+            aifd_manager = None
+            if hasattr(args, 'use_aifd') and args.use_aifd:
+                aifd_stat_type = getattr(args, 'aifd_stat_type', 'median_iqr')
+                aifd_debug = getattr(args, 'aifd_debug', False)
+                aifd_manager = AIFDManager(
+                    arch=args.arch,
+                    stat_type=aifd_stat_type,
+                    enabled=True,
+                    debug=aifd_debug
+                )
+                aifd_manager.setup_hooks(model)
+                if aifd_debug:
+                    print(f"AIFD: Initialized for {args.arch} with {aifd_stat_type} statistics")
+
             if args.stat_reg == 'mean_var':
                 if isinstance(args.stat_type, str):
                     raise NotImplementedError(
@@ -342,7 +357,7 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                 input = input.view(-1, 3, input.size(2), input.size(3))
                 input = input.view(actual_bz * args.test_crops * n_clips,
                                    args.clip_length, 3, input.size(2), input.size(3))  # (actual_bz * spatial_crops * temporal_clips* clip_len,  C, 256, 256) -> (actual_bz * spatial_crops * temporal_clips,  clip_len,  C, 256, 256)
-                output = model( input)  # (actual_bz * spatial_crops * temporal_clips,         clip_len,  C, 256, 256)   ->     (actual_bz * spatial_crops * temporal_clips,       n_class )
+                output = model( input)  # (actual_bz * spatial_crops * temporal_clips, clip_len,  C, 256, 256)   ->     (actual_bz * spatial_crops * temporal_clips,       n_class )
                 # take the average among all spatial_crops * temporal_clips,   (actual_bz * spatial_crops * temporal_clips,       n_class )  ->   (actual_bz,       n_class )
                 output = output.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
             elif args.arch == 'videoswintransformer':
