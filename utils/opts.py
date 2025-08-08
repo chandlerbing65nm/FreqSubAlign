@@ -40,6 +40,8 @@ parser.add_argument('--val_vid_list', type=str,
 parser.add_argument('--result_dir', type=str,
                     default='',
                     help='result directory')
+parser.add_argument('--result_suffix', type=str, default='',
+                    help='custom suffix to append to result files for unique identification')
 
 # ========================= Model Configuration ==========================
 parser.add_argument('--arch', type=str, default='tanet',
@@ -99,6 +101,8 @@ parser.add_argument('--if_spatial_rand_cropping', type=bool, default=True)
 parser.add_argument('--if_pred_consistency', type=bool, default=True)
 parser.add_argument('--lambda_pred_consis', type=float, default=0.1)
 parser.add_argument('--lambda_feature_reg', type=int, default=1)
+parser.add_argument('--include_ce_in_consistency', type=bool, default=True,
+                    help='Whether to include cross-entropy loss when using prediction consistency')
 parser.add_argument('--n_augmented_views', type=int, default=2)
 parser.add_argument('--tta_view_sample_style_list', default=['uniform_equidist'])
 parser.add_argument('--stat_type', default=['spatiotemp'])
@@ -127,7 +131,8 @@ parser.add_argument('--input_std', default=input_std)
 
 # ========================= Training Configuration ==========================
 parser.add_argument('--lr', default=0.00005)
-parser.add_argument('--n_epoch_adapat', default=1)
+parser.add_argument('--n_epoch_adapat', type=int, default=1,
+                    help='number of adaptation epochs for TTA (default: 1 for backward compatibility)')
 parser.add_argument('--momentum', default=0.9, type=float,
                     help='momentum')
 parser.add_argument('--weight-decay', '--wd', default=5e-4, type=float,

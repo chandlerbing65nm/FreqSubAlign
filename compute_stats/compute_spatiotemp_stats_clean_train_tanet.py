@@ -11,7 +11,7 @@ if __name__ == '__main__':
     args = get_opts()
     args.gpus = [0]
     args.arch = 'tanet'
-    args.dataset = 'uffia' # somethingv2, ucf101, uffia
+    args.dataset = 'ucf101' # somethingv2, ucf101, uffia
     args.vid_format = '.mp4' # .webm, .avi
 
 

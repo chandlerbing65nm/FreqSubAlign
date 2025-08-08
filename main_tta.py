@@ -127,7 +127,7 @@ def get_model_config(arch, dataset='somethingv2', tta_mode=True):
             if tta_mode:
                 config.update({
                     'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet/list_spatiotemp_mean_20220908_235138.npy',
-                    'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet/list_spatiotemp_mean_20250529_134901.npy',
+                    'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet/list_spatiotemp_var_20220908_235138.npy',
                     'additional_args': {
                         **config['additional_args'],
                         'lr': 5e-5
@@ -151,8 +151,8 @@ def get_model_config(arch, dataset='somethingv2', tta_mode=True):
                     'additional_args': {
                         **config['additional_args'],
                         'lr': 1e-6,
-                        'lambda_pred_consis': 0.05,
-                        'momentum_mvg': 0.07,
+                        'lambda_pred_consis': 0.1,
+                        'momentum_mvg': 0.1,
                         'momentum_bns': 0.1,
                     }
                 })
@@ -179,16 +179,6 @@ if __name__ == '__main__':
     # Set model paths and parameters
     args.model_path = model_config['model_path']
     
-    # Set TTA-specific parameters if in TTA mode
-    if args.tta:
-        args.spatiotemp_mean_clean_file = model_config['spatiotemp_mean_clean_file']
-        args.spatiotemp_var_clean_file = model_config['spatiotemp_var_clean_file']
-        args.n_epoch_adapat = 1  # Number of adaptation epochs for TTA
-    else:
-        # Source-only evaluation parameters
-        args.evaluate_baselines = True
-        args.baseline = 'source'
-    
     # Set additional arguments for the selected architecture
     for key, value in model_config['additional_args'].items():
         setattr(args, key, value)
@@ -207,20 +197,24 @@ if __name__ == '__main__':
     args.batch_size = 1  # Default to 1 for TTA, can be overridden
     # args.vid_format = '.mp4'  # Only for somethingv2
 
+    # Set TTA-specific parameters if in TTA mode
+    if args.tta:
+        args.spatiotemp_mean_clean_file = model_config['spatiotemp_mean_clean_file']
+        args.spatiotemp_var_clean_file = model_config['spatiotemp_var_clean_file']
+        args.n_epoch_adapat = 4
+        print(f"Multi-epoch TTA enabled: Using {args.n_epoch_adapat} adaptation epochs")
+
+        args.include_ce_in_consistency = False
+        args.result_suffix=f"celoss={args.include_ce_in_consistency}_adaptepoch={args.n_epoch_adapat}"
+    else:
+        # Source-only evaluation parameters
+        args.evaluate_baselines = True
+        args.baseline = 'source'
+        args.result_suffix=f'tta={args.tta}_evalbaseline={args.evaluate_baselines}_baseline={args.baseline}'
+
     # Set up corruption types to evaluate
     corruptions = [
-        # 'gauss', 
-        # 'pepper', 
-        # 'salt', 
-        # 'shot',
-        # 'zoom', 
-        # 'impulse', 
-        # 'defocus', 
-        # 'motion',
-        'jpeg', 
-        'contrast', 
-        'rain', 
-        'h265_abr'
+        'random',
         ]
 
     # Set up result directory based on evaluation mode

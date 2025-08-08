@@ -109,7 +109,37 @@ def path_logger(result_dir, log_time):
     logger = logging.getLogger('basic')
     logger.setLevel(logging.DEBUG)
 
-    path_logging = os.path.join(result_dir, f'{log_time}')
+    # Create unique suffix from specified arguments
+    unique_parts = []
+    
+    # This function is called from main_eval.py and main_train.py
+    # We need to pass args or use a different approach
+    # For now, we'll use a simple approach - you can enhance this as needed
+    import sys
+    
+    # Try to get args from caller's frame
+    try:
+        frame = sys._getframe(2)
+        local_vars = frame.f_locals
+        if 'args' in local_vars:
+            args = local_vars['args']
+            
+            # Check for result_suffix first
+            if hasattr(args, 'result_suffix') and args.result_suffix:
+                unique_parts.append(args.result_suffix)
+            else:
+                key_args = ['corruptions', 'baseline', 'arch', 'dataset', 'lr', 'batch_size']
+                for arg_name in key_args:
+                    if hasattr(args, arg_name) and getattr(args, arg_name) is not None:
+                        arg_value = getattr(args, arg_name)
+                        clean_value = str(arg_value).replace('/', '_').replace(' ', '_')
+                        unique_parts.append(f"{arg_name}_{clean_value}")
+    except (ValueError, AttributeError):
+        pass
+    
+    unique_suffix = '_'.join(unique_parts) if unique_parts else 'default'
+    
+    path_logging = os.path.join(result_dir, f'{log_time}_{unique_suffix}')
 
     fileHandler = logging.FileHandler(path_logging, mode='w')
     fileHandler.setLevel(logging.DEBUG)
@@ -278,11 +308,32 @@ def save_checkpoint(state, is_best, filename='checkpoint.pth.tar', result_dir=No
 
 def get_writer_to_all_result(args, custom_path=None):
     log_time = time.strftime("%Y%m%d_%H%M%S")
-
-    if custom_path is None:
-        f_write = open(osp.join(args.result_dir, f'{log_time}_all_result'), 'w+')
+    
+    # Create unique suffix from specified arguments
+    unique_parts = []
+    
+    # Check for arguments that should be used for unique identification
+    # Priority: result_suffix (if provided), then specific args, then fallback
+    if hasattr(args, 'result_suffix') and args.result_suffix:
+        unique_parts.append(args.result_suffix)
     else:
-        f_write = open(osp.join(custom_path, f'{args.baseline}_{log_time}_all_result'), 'w+')
+        # Define which arguments to include for uniqueness
+        # You can modify this list based on your needs
+        key_args = ['corruptions', 'baseline', 'arch', 'dataset', 'lr', 'batch_size']
+        
+        for arg_name in key_args:
+            if hasattr(args, arg_name) and getattr(args, arg_name) is not None:
+                arg_value = getattr(args, arg_name)
+                # Clean the value for filesystem compatibility
+                clean_value = str(arg_value).replace('/', '_').replace(' ', '_')
+                unique_parts.append(f"{arg_name}_{clean_value}")
+    
+    unique_suffix = '_'.join(unique_parts) if unique_parts else 'default'
+    
+    if custom_path is None:
+        f_write = open(osp.join(args.result_dir, f'{log_time}_{unique_suffix}_all_result'), 'w+')
+    else:
+        f_write = open(osp.join(custom_path, f'{args.baseline}_{log_time}_{unique_suffix}_all_result'), 'w+')
 
     for arg in dir(args):
         if arg[0] != '_':

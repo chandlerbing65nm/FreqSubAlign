@@ -19,5 +19,5 @@ conda activate ttadapt
 # Set the working directory
 cd /users/doloriel/work/Repo/ViTTA
 
-# Run the Python script
+# Run the Python scripta
 python -m main_tta
