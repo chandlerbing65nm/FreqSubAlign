@@ -2,6 +2,7 @@ import time
 # import os
 from torch.nn.utils import clip_grad_norm
 import torch.nn as nn
+import torch.nn.functional as F
 from einops import rearrange
 import torch
 import torch.nn.parallel
@@ -17,6 +18,7 @@ from config import device
 
 from datasets_.dataset_deprecated import MyTSNDataset
 from datasets_.video_dataset import MyTSNVideoDataset, MyVideoDataset
+from utils.ema_teacher import EMATeacher
 
 
 from models.r2plus1d import MyR2plus1d
@@ -41,6 +43,9 @@ from torch.nn.parallel import DistributedDataParallel
 from corpus.dataset_utils import get_dataset, get_dataset_tanet, get_dataset_videoswin
 # from corpus.model_utils import get_model
 from corpus.statistics_utils import compute_statistics, compute_cos_similarity, load_precomputed_statistics
+from utils.confidence_gated_optimizer import ConfidenceGatedOptimizer, AdaptiveConfidenceGatedOptimizer
+from utils.confidence_meta_optimizer import ConfidenceMetaOptimizer, AdaptiveConfidenceMetaOptimizer
+from utils.confidence_inverted_optimizer import ConfidenceInvertedOptimizer, AdaptiveConfidenceInvertedOptimizer
 
 def tta_standard(model_origin, criterion, args=None, logger = None, writer =None):
     """
@@ -59,12 +64,12 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
         #   do not accumulate the target statistics between different samples
         assert args.momentum_mvg == 1.0
         # Multi-epoch support: removed hard-coded n_epoch_adapat == 1 assertion
-        print(f"TTA Standard mode: Using {args.n_epoch_adapat} epochs for adaptation")
+        logger.debug(f"TTA Standard mode: Using {args.n_epoch_adapat} epochs for adaptation")
     elif args.if_tta_standard == 'tta_online':
         assert args.momentum_mvg != 1.0  # todo accumulate the target statistics for different samples
         assert args.n_gradient_steps == 1 # todo one gradient step per sample (on forward pass per sample )
         # Multi-epoch support: removed hard-coded n_epoch_adapat == 1 assertion
-        print(f"TTA Online mode: Using {args.n_epoch_adapat} epochs for adaptation")
+        logger.debug(f"TTA Online mode: Using {args.n_epoch_adapat} epochs for adaptation")
     from utils.norm_stats_utils import CombineNormStatsRegHook_onereg
     # from utils.relation_map_utils import CombineCossimRegHook
 
@@ -111,6 +116,7 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
     losses_ce = AverageMeter()
     losses_reg = AverageMeter()
     losses_consis = AverageMeter()
+    losses_distill = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
     pred_concat = []
@@ -165,7 +171,7 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
         
         # Multi-epoch training loop
         for epoch_id in range(args.n_epoch_adapat):
-            print(f"Batch {batch_id}, Epoch {epoch_id+1}/{args.n_epoch_adapat}")
+            # print(f"Batch {batch_id}, Epoch {epoch_id+1}/{args.n_epoch_adapat}")
             
             # Use original input/target for each epoch
             input, target = original_input.clone(), original_target.clone()
@@ -180,11 +186,27 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                     setup_model_optimizer = True #  setup model and optimizer only before the first sample comes
 
             if setup_model_optimizer:
-                print(f'Batch {batch_id}, Epoch {epoch_id+1}, initialize the model, update chosen layers, initialize hooks, intialize average meter')
+                # print(f'Batch {batch_id}, Epoch {epoch_id+1}, initialize the model, update chosen layers, initialize hooks, intialize average meter')
                 # todo ############################################################
                 # todo #####################################  re-intialize the model, update chosen_layers from this new model
                 # todo ############################################################
                 model = cp.deepcopy(model_origin)
+                
+                # Initialize EMA teacher if enabled
+                ema_teacher = None
+                if hasattr(args, 'use_ema_teacher') and args.use_ema_teacher:
+                    from utils.ema_teacher import EMATeacher
+                    ema_teacher = EMATeacher(
+                        model=model,
+                        momentum=args.ema_momentum,
+                        temperature=args.ema_temperature,
+                        adaptive_temperature=args.ema_adaptive_temp,
+                        min_temperature=args.ema_min_temp,
+                        max_temperature=args.ema_max_temp,
+                        temperature_alpha=args.ema_temp_alpha,
+                        device=device
+                    )
+                    logger.info(f"EMA teacher initialized with momentum={args.ema_momentum}")
                 # when we initialize the model, we have to re-choose the layers from it.
                 if args.arch == 'tanet':
                     # todo  temporal statistics are computed on  nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d
@@ -213,10 +235,81 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                                                  bn_condidiate_layers=[nn.LayerNorm])  # set only Batchnorm layers to trainable,   freeze all the other layers
                         params, param_names = collect_bn_params(model,
                                                                 bn_candidate_layers=[nn.LayerNorm])  # collecting gamma and beta in all Batchnorm layers
-                    optimizer = torch.optim.Adam(params, lr=args.lr, betas=(0.9, 0.999), weight_decay=0.)
+                    base_optimizer = torch.optim.Adam(params, lr=args.lr, betas=(0.9, 0.999), weight_decay=0.)
                 else:
-                    optimizer = torch.optim.SGD(params=model.parameters(), lr=args.lr, momentum=args.momentum,
+                    base_optimizer = torch.optim.SGD(params=model.parameters(), lr=args.lr, momentum=args.momentum,
                                                 weight_decay=args.weight_decay)
+                
+                # Create optimizer with CIMO/CGMO/CGO wrapping
+                if hasattr(args, 'use_cimo') and args.use_cimo:
+                    # Use Confidence-Inverted Meta-Optimizer (CIMO)
+                    if hasattr(args, 'cimo_adaptive') and args.cimo_adaptive:
+                        optimizer = AdaptiveConfidenceInvertedOptimizer(
+                            base_optimizer,
+                            confidence_threshold=args.cimo_confidence_threshold,
+                            min_lr_scale=args.cimo_min_lr_scale,
+                            max_lr_scale=args.cimo_max_lr_scale,
+                            confidence_power=args.cimo_confidence_power,
+                            enable_momentum_correction=args.cimo_enable_momentum_correction,
+                            enable_logging=True
+                        )
+                    else:
+                        optimizer = ConfidenceInvertedOptimizer(
+                            base_optimizer,
+                            confidence_threshold=args.cimo_confidence_threshold,
+                            min_lr_scale=args.cimo_min_lr_scale,
+                            max_lr_scale=args.cimo_max_lr_scale,
+                            confidence_power=args.cimo_confidence_power,
+                            enable_momentum_correction=args.cimo_enable_momentum_correction,
+                            enable_logging=True
+                        )
+                elif hasattr(args, 'use_cgmo') and args.use_cgmo:
+                    # Use CGMO (Meta-Optimizer) - prioritizes over CGO
+                    if hasattr(args, 'cgmo_adaptive_threshold') and args.cgmo_adaptive_threshold:
+                        optimizer = AdaptiveConfidenceMetaOptimizer(
+                            base_optimizer,
+                            confidence_threshold=args.cgmo_confidence_threshold,
+                            min_lr_scale=args.cgmo_min_lr_scale,
+                            max_lr_scale=args.cgmo_max_lr_scale,
+                            confidence_power=args.cgmo_confidence_power,
+                            enable_momentum_correction=args.cgmo_enable_momentum_correction,
+                            target_confidence=args.cgmo_confidence_threshold,
+                            enable_logging=args.cgo_enable_logging
+                        )
+                        logger.info(f"Using Adaptive CGMO with threshold={args.cgmo_confidence_threshold}")
+                    else:
+                        optimizer = ConfidenceMetaOptimizer(
+                            base_optimizer,
+                            confidence_threshold=args.cgmo_confidence_threshold,
+                            min_lr_scale=args.cgmo_min_lr_scale,
+                            max_lr_scale=args.cgmo_max_lr_scale,
+                            confidence_power=args.cgmo_confidence_power,
+                            enable_momentum_correction=args.cgmo_enable_momentum_correction,
+                            enable_logging=args.cgo_enable_logging
+                        )
+                        logger.info(f"Using CGMO with threshold={args.cgmo_confidence_threshold}")
+                elif hasattr(args, 'use_cgo') and args.use_cgo:
+                    # Fallback to original CGO
+                    if hasattr(args, 'cgo_adaptive') and args.cgo_adaptive:
+                        optimizer = AdaptiveConfidenceGatedOptimizer(
+                            base_optimizer,
+                            initial_threshold=args.cgo_confidence_threshold,
+                            target_adaptation_rate=args.cgo_target_adaptation_rate,
+                            confidence_metric=args.cgo_confidence_metric,
+                            enable_logging=args.cgo_enable_logging
+                        )
+                        logger.info(f"Using Adaptive CGO with initial threshold={args.cgo_confidence_threshold}")
+                    else:
+                        optimizer = ConfidenceGatedOptimizer(
+                            base_optimizer,
+                            confidence_threshold=args.cgo_confidence_threshold,
+                            confidence_metric=args.cgo_confidence_metric,
+                            enable_logging=args.cgo_enable_logging
+                        )
+                        logger.info(f"Using CGO with threshold={args.cgo_confidence_threshold}")
+                else:
+                    optimizer = base_optimizer
+                    logger.info("Using standard optimizer (no CGMO/CGO)")
 
                 # todo ############################################################
                 # todo ##################################### initialize hooks to the chosen layers for computing statistics, initialize average meter
@@ -291,14 +384,14 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
             n_gradient_steps = args.n_gradient_steps
             for step_id in range(n_gradient_steps):
                 if args.arch == 'tanet':
-                    output = model(input)
+                    raw_output = model(input)
                     if args.if_sample_tta_aug_views:
-                        output = output.reshape(actual_bz, args.test_crops * n_augmented_views, -1)  # (N, n_views, n_class )
+                        raw_output = raw_output.reshape(actual_bz, args.test_crops * n_augmented_views, -1)  # (N, n_views, n_class )
                         if if_pred_consistency:
-                            loss_consis = compute_pred_consis(output)
-                        output = output.mean(1)
+                            loss_consis = compute_pred_consis(raw_output)
+                        output = raw_output.mean(1)
                     else:
-                        output = output.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
+                        output = raw_output.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
 
                 elif args.arch == 'videoswintransformer':
                     if args.if_sample_tta_aug_views:
@@ -308,10 +401,11 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                     # input = input.view(-1, n_views, 3, args.clip_length, input.size(3), input.size(4))
                     if args.if_sample_tta_aug_views:
                         if if_pred_consistency:
-                            output, view_cls_score = model( input)  # (batch, n_views, C, T, H, W) ->  (batch, n_class), todo outputs are unnormalized scores
+                            raw_output, view_cls_score = model( input)  # (batch, n_views, C, T, H, W) ->  (batch, n_class), todo outputs are unnormalized scores
                             loss_consis = compute_pred_consis(view_cls_score)
                     else:
-                        output, _ = model( input)
+                        raw_output, _ = model( input)
+                    output = raw_output
                 else:
                     raise NotImplementedError(f'Incorrect model type {args.arch}')
 
@@ -337,21 +431,121 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                     # Conditionally include CE loss when using consistency
                     if hasattr(args, 'include_ce_in_consistency') and args.include_ce_in_consistency:
                         loss_components.append(loss_ce)
-                else:
-                    # Always include CE loss when no consistency
-                    loss_components.append(loss_ce)
+                # else:
+                #     # Always include CE loss when no consistency
+                #     loss_components.append(loss_ce)
+                
+                # Add distillation loss from EMA teacher
+                loss_distill = torch.tensor(0.0).float().to(device)
+                if hasattr(args, 'use_ema_teacher') and args.use_ema_teacher and ema_teacher is not None:
+                    # Compute confidence for inverted weighting
+                    confidence = torch.max(F.softmax(output, dim=-1), dim=-1)[0]
+                    
+                    # Warmup: optionally skip distillation for first K steps
+                    if getattr(args, 'ema_distill_warmup_steps', 0) and step_id < args.ema_distill_warmup_steps:
+                        pass
+                    else:
+                        # Define n_views based on architecture and augmentation settings
+                        if args.arch == 'tanet':
+                            if args.if_sample_tta_aug_views:
+                                n_views = args.test_crops * n_augmented_views
+                            else:
+                                n_views = args.test_crops * n_clips
+                        elif args.arch == 'videoswintransformer':
+                            if args.if_sample_tta_aug_views:
+                                n_views = args.test_crops * n_augmented_views
+                            else:
+                                n_views = args.test_crops * n_clips
+                        else:
+                            n_views = args.test_crops * n_clips  # Default fallback
+                        
+                        # Get teacher predictions (multi-view aggregation)
+                        if args.if_sample_tta_aug_views:
+                            # For multi-view case, aggregate teacher predictions across views
+                            teacher_logits_list = []
+                            for v in range(n_views):
+                                start_idx = v * actual_bz
+                                end_idx = (v + 1) * actual_bz
+                                view_input = input[start_idx:end_idx] if args.arch == 'tanet' else input
+                                teacher_logits = ema_teacher.forward(view_input, confidence)
+                                teacher_logits_list.append(teacher_logits)
+                            
+                            # Aggregate teacher predictions
+                            teacher_logits = torch.stack(teacher_logits_list).mean(dim=0)
+                        else:
+                            # Single view case
+                            teacher_logits = ema_teacher.forward(input, confidence)
+                        
+                        # Compute distillation loss with a single, shared temperature
+                        T = args.ema_temperature
+                        student_logits_T = output / T
+                        teacher_targets = F.softmax(teacher_logits / T, dim=-1)
+                        # Per-sample KL for weighting
+                        kl_per_sample = F.kl_div(
+                            F.log_softmax(student_logits_T, dim=-1),
+                            teacher_targets,
+                            reduction='none'
+                        ).sum(dim=-1)
+                        
+                        # Confidence-inverted sample weighting: higher weight for low-confidence samples
+                        p = getattr(args, 'distill_conf_power', 1.5)
+                        weight = (1.0 - confidence).pow(p)
+                        # Optional gating by confidence threshold
+                        conf_thresh = getattr(args, 'ema_distill_conf_thresh', 1.0)
+                        if conf_thresh < 1.0:
+                            gate = (confidence < conf_thresh).float()
+                            weight = weight * gate
+                        weight = torch.clamp(weight, 0.2, 1.0)
+                        
+                        # If all weights are zero (fully gated), skip contribution
+                        denom = weight.sum().clamp_min(1e-6)
+                        loss_distill = (kl_per_sample * weight).sum() / denom
+                        
+                        loss_components.append(args.lambda_distill * loss_distill)
                 
                 loss = sum(loss_components)
 
                 optimizer.zero_grad()
                 loss.backward()
-                optimizer.step()
-                # global_iter += 1
+                
+                # Use CIMO/CGMO/CGO conditional step if enabled, otherwise standard step
+                if hasattr(args, 'use_cimo') and args.use_cimo:
+                    # Use CIMO (Inverted Meta-Optimizer) - confidence-inverted updates
+                    step_info = optimizer.conditional_step(raw_output, loss)
+                    # Log CIMO decision if verbose
+                    if args.verbose and step_info:
+                        logger.debug(f"CIMO Step - Confidence: {step_info['confidence']:.3f}, "
+                                   f"LR Scale: {step_info['lr_scale']:.3f} (INVERTED), "
+                                   f"Gradient Weight: {step_info['gradient_weight']:.3f}")
+                elif hasattr(args, 'use_cgmo') and args.use_cgmo:
+                    # Use CGMO (Meta-Optimizer) - confidence-weighted updates
+                    step_info = optimizer.conditional_step(raw_output, loss)
+                    # Log CGMO decision if verbose
+                    if args.verbose and step_info:
+                        logger.debug(f"CGMO Step - Confidence: {step_info['confidence']:.3f}, "
+                                   f"LR Scale: {step_info['lr_scale']:.3f}, "
+                                   f"Gradient Weight: {step_info['gradient_weight']:.3f}")
+                elif hasattr(args, 'use_cgo') and args.use_cgo:
+                    # Use CGO - binary gating
+                    step_info = optimizer.conditional_step(raw_output, loss)
+                    # Log CGO decision if verbose
+                    if args.verbose and step_info:
+                        logger.debug(f"CGO Step - Confidence: {step_info['confidence']:.3f}, "
+                                   f"Threshold: {step_info['threshold']:.3f}, "
+                                   f"Adapted: {step_info['adapted']}")
+                else:
+                    optimizer.step()
 
-            losses_ce.update(loss_ce.item(), actual_bz)
-            losses_reg.update(loss_reg.item(), actual_bz)
-            if if_pred_consistency:
-                losses_consis.update(loss_consis.item(), actual_bz)
+                # Update EMA teacher after optimizer step
+                if hasattr(args, 'use_ema_teacher') and args.use_ema_teacher and ema_teacher is not None:
+                    ema_teacher.update(model)
+
+                losses_ce.update(loss_ce.item(), actual_bz)
+                losses_reg.update(loss_reg.item(), actual_bz)
+                if if_pred_consistency:
+                    losses_consis.update(loss_consis.item(), actual_bz)
+                if hasattr(args, 'use_ema_teacher') and args.use_ema_teacher and ema_teacher is not None:
+                    losses_distill.update(loss_distill.item(), actual_bz)
 
             # todo ############################################################
             # todo ##################################### remove all the hooks, no computation of statistics during inference
@@ -415,20 +609,40 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                 assert hook_layer_counter == len(stat_reg_hooks)
 
             if args.verbose:
-                logger.debug(('TTA Epoch{epoch}: [{0}/{1}]	'
-                              'Time {batch_time.val:.3f} ({batch_time.avg:.3f})	'
-                              'Loss reg {loss_reg.val:.4f} ({loss_reg.avg:.4f})	'
-                              'Loss consis {loss_consis.val:.4f} ({loss_consis.avg:.4f})	'
-                              'Loss ce {loss_ce.val:.4f} ({loss_ce.avg:.4f})	'
-                              'Prec@1 {top1.val:.3f} ({top1.avg:.3f})	'
+                logger.debug(('TTA Epoch{epoch}: [{0}/{1}]\t'
+                              'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                              'Loss reg {loss_reg.val:.4f} ({loss_reg.avg:.4f})\t'
+                              'Loss consis {loss_consis.val:.4f} ({loss_consis.avg:.4f})\t'
+                              'Loss distill {loss_distill.val:.4f} ({loss_distill.avg:.4f})\t'
+                              'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
                               'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
-                    batch_id, len(tta_loader), epoch=epoch_id+1, batch_time=batch_time, loss_reg=losses_reg, loss_consis=losses_consis, loss_ce=losses_ce,
-                    top1=top1, top5=top5)))
+                    batch_id, len(tta_loader), epoch=epoch_id+1, batch_time=batch_time, loss_reg=losses_reg, loss_consis=losses_consis,
+                    loss_distill=losses_distill, top1=top1, top5=top5)))
+
+        # # Log CIMO/CGMO/CGO statistics if applicable
+        # if hasattr(optimizer, 'get_adaptation_stats') and (hasattr(args, 'use_cimo') and args.use_cimo):
+        #     stats = optimizer.get_adaptation_stats()
+        #     if logger:
+        #         logger.info(f"CIMO Stats - Mean Confidence: {stats['mean_confidence']:.3f}, "
+        #                    f"Mean LR Scale: {stats['mean_lr_scale']:.3f}, "
+        #                    f"Adaptation Rate: {stats['adaptation_rate']:.3f} (INVERTED)")
+        # elif hasattr(optimizer, 'get_adaptation_stats') and (hasattr(args, 'use_cgmo') and args.use_cgmo):
+        #     stats = optimizer.get_adaptation_stats()
+        #     if logger:
+        #         logger.info(f"CGMO Stats - Mean Confidence: {stats['mean_confidence']:.3f}, "
+        #                    f"Mean LR Scale: {stats['mean_lr_scale']:.3f}, "
+        #                    f"Adaptation Rate: {stats['adaptation_rate']:.3f}")
+        # elif hasattr(optimizer, 'get_adaptation_stats') and (hasattr(args, 'use_cgo') and args.use_cgo):
+        #     stats = optimizer.get_adaptation_stats()
+        #     if logger:
+        #         logger.info(f"CGO Stats - Mean Confidence: {stats['mean_confidence']:.3f}, "
+        #                    f"Adaptation Rate: {stats['adaptation_rate']:.3f}, "
+        #                    f"Gated Updates: {stats['gated_updates']}/{stats['total_samples']}")
 
     epoch_result_list.append(top1.avg)
-
+    
     # model_path = osp.join(  args.result_dir, f'{args.corruptions}.model' )
-    # print(f'Saving models to {model_path}')
+    # logger.debug(f'Saving models to {model_path}')
     #
     # torch.save( model.state_dict(), model_path )
 

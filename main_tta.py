@@ -194,18 +194,61 @@ if __name__ == '__main__':
     # Default arguments
     args.gpus = [0]
     args.video_data_dir = '/scratch/project_465001897/datasets/ucf/val_corruptions'
-    args.batch_size = 1  # Default to 1 for TTA, can be overridden
     # args.vid_format = '.mp4'  # Only for somethingv2
 
+    # args.use_cgo = True
+    # args.cgo_confidence_threshold = 0.4  # Moderate threshold
+    # args.cgo_confidence_metric = 'max_softmax'
+    # args.cgo_enable_logging = True
+    # args.cgo_adaptive = False  # Use fixed threshold for stability
+    
+    # # CIMO (Inverted Meta-Optimizer) arguments - learn from hard samples
+    # args.use_cimo = False  # Set to True to enable CIMO
+    # args.confidence_metric = 'max_softmax'
+    # args.cimo_confidence_threshold = 0.3
+    # args.cimo_min_lr_scale = 0.1
+    # args.cimo_max_lr_scale = 3.0
+    # args.cimo_confidence_power = 6.0
+    # args.cimo_enable_momentum_correction = True
+    # args.cimo_adaptive = False
+    
+    # EMA Teacher arguments for inverted self-distillation
+    args.use_ema_teacher = True  # Enable EMA teacher-based distillation
+    args.ema_momentum = 0.9995  # EMA momentum for teacher updates
+    args.ema_temperature = 6.0  # Base temperature for soft targets
+    args.ema_adaptive_temp = False  # Disable adaptive temperature by default
+    args.ema_min_temp = 0.1  # Minimum temperature (unused when adaptive off)
+    args.ema_max_temp = 8.0  # Maximum temperature (unused when adaptive off)
+    args.ema_temp_alpha = 2.0  # Temperature adaptation scaling (unused when adaptive off)
+    args.lambda_distill = 0.2  # Lower weight for distillation loss by default
+    # Distillation control arguments
+    args.distill_conf_power = 1.5
+    args.ema_distill_conf_thresh = 1.0
+    args.ema_distill_warmup_steps = 0
+
+    args.n_augmented_views = 4
+    args.if_sample_tta_aug_views = True
+    args.batch_size = 3  # Default to 1 for TTA, can be overridden
+    
     # Set TTA-specific parameters if in TTA mode
     if args.tta:
         args.spatiotemp_mean_clean_file = model_config['spatiotemp_mean_clean_file']
         args.spatiotemp_var_clean_file = model_config['spatiotemp_var_clean_file']
-        args.n_epoch_adapat = 4
+        args.n_epoch_adapat = 2
         print(f"Multi-epoch TTA enabled: Using {args.n_epoch_adapat} adaptation epochs")
 
         args.include_ce_in_consistency = False
-        args.result_suffix=f"celoss={args.include_ce_in_consistency}_adaptepoch={args.n_epoch_adapat}"
+        suffix = f"celoss={args.include_ce_in_consistency}_adaptepoch={args.n_epoch_adapat}"
+        
+        # Add EMA teacher parameters
+        if hasattr(args, 'use_ema_teacher') and args.use_ema_teacher:
+            suffix += f"_ema{args.ema_momentum}_temp{args.ema_temperature}"
+            if args.ema_adaptive_temp:
+                suffix += f"_adapttemp"
+            suffix += f"_distill{args.lambda_distill}"
+        suffix += f"_views{args.n_augmented_views}_bs{args.batch_size}"
+        
+        args.result_suffix = suffix
     else:
         # Source-only evaluation parameters
         args.evaluate_baselines = True
@@ -213,9 +256,12 @@ if __name__ == '__main__':
         args.result_suffix=f'tta={args.tta}_evalbaseline={args.evaluate_baselines}_baseline={args.baseline}'
 
     # Set up corruption types to evaluate
-    corruptions = [
-        'random',
-        ]
+    # corruptions = ['random_mini', 'gauss_mini']
+    corruptions = ['gauss_mini', 'pepper_mini', 'salt_mini','shot_mini',
+                'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
+                'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
+                'random_mini'  
+                ]
 
     # Set up result directory based on evaluation mode
     if args.tta:
