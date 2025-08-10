@@ -228,7 +228,7 @@ if __name__ == '__main__':
 
     args.n_augmented_views = 4
     args.if_sample_tta_aug_views = True
-    args.batch_size = 3  # Default to 1 for TTA, can be overridden
+    args.batch_size = 1  # Default to 1 for TTA, can be overridden
     
     # Set TTA-specific parameters if in TTA mode
     if args.tta:
