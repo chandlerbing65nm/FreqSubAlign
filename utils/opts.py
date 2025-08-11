@@ -110,9 +110,33 @@ parser.add_argument('--before_norm', action='store_true')
 parser.add_argument('--reduce_dim', type=bool, default=True)
 parser.add_argument('--reg_type', type=str, default='l1_loss')
 parser.add_argument('--chosen_blocks', default=['layer3', 'layer4'])
+parser.add_argument('--adaptive_choose_blocks', action='store_true',
+                    help='Enable adaptive selection of chosen_blocks based on BN metrics')
+parser.add_argument('--blocks_metric', type=str, default='entropy', choices=['entropy', 'fisher'],
+                    help='Metric used to select blocks adaptively: entropy (lower is better) or fisher (higher is better)')
+parser.add_argument('--blocks_combo', type=str, default='auto', choices=['auto', 'single', 'pair', 'triple', 'all'],
+                    help='Which combination size to consider among the 15 combos: auto lets the metric decide with simple heuristic')
+parser.add_argument('--blocks_agg', type=str, default='sum', choices=['sum', 'mean'],
+                    help='Aggregation across layers inside a combination')
+parser.add_argument('--blocks_probe_batches', type=int, default=1,
+                    help='How many probe batches to use to estimate BN metrics for adaptive selection')
+parser.add_argument('--blocks_reselect_every', type=int, default=0,
+                     help='If >0 and adaptive selection is enabled, re-select chosen_blocks every N adaptation epochs')
 parser.add_argument('--moving_avg', type=bool, default=True)
 parser.add_argument('--n_gradient_steps', type=int, default=1,
                     help='number of gradient steps per sample')
+
+# ========================= Fail-Forward Probing (FFP) ==========================
+parser.add_argument('--probe_ffp_enable', type=bool, default=True,
+                    help='Enable Fail-Forward Probing: forward-only warmup before adaptation to initialize runtime states (BN/AMP/autotune)')
+parser.add_argument('--probe_ffp_steps', type=int, default=1,
+                    help='Number of forward-only probe passes before adaptation (each pass is eval->train gated)')
+parser.add_argument('--probe_conf_thresh', type=float, default=0.6,
+                    help='Confidence threshold (max softmax) to allow BN running stats updates during probe')
+parser.add_argument('--probe_amp', type=bool, default=True,
+                    help='Use autocast mixed precision during probe forwards (if supported)')
+parser.add_argument('--probe_max_backoff', type=int, default=1,
+                    help='Max backoff attempts on OOM during probe (currently used to skip remaining probes)')
 
 # ========================= Confidence-Gated Optimizer (CGO) Configuration ==========================    # CGO arguments
 parser.add_argument('--use_cgo', action='store_true',

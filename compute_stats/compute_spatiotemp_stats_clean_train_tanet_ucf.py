@@ -12,22 +12,22 @@ if __name__ == '__main__':
     args.gpus = [0]
     args.arch = 'tanet'
     args.dataset = 'ucf101' # somethingv2, ucf101, uffia
-    args.vid_format = '.mp4' # .webm, .avi
+    args.vid_format = '.avi' # .webm, .avi
 
 
     # todo ========================= To Specify ==========================
-    args.model_path = '/scratch/project_465001897/datasets/uffia/model_tanet/20250805_221622_uffia_rgb_model_best.pth.tar'
+    args.model_path = '/scratch/project_465001897/datasets/ucf/model_tanet/tanet_ucf.pth.tar'
 
-    args.video_data_dir = '/scratch/project_465001897/datasets/uffia/video' # Use fish dataset videos
-    args.val_vid_list = '/scratch/project_465001897/datasets/uffia/split/train_rgb_split_1.txt' # Use fish training data for statistics
+    args.video_data_dir = '/scratch/project_465001897/datasets/ucf/videos/samples' # Use fish dataset videos
+    args.val_vid_list = '/scratch/project_465001897/datasets/ucf/videos/split/train_rgb_split_1.txt' # Use fish training data for statistics
     # todo ========================= To Specify ==========================
 
-    args.clip_length = 8
+    args.clip_length = 16
     args.test_crops = 3
     args.num_clips = 1
     args.batch_size = 24
     args.scale_size = 256
-    args.crop_size = 256
+    # args.crop_size = 256
     args.input_size = 224
     args.frame_uniform = True
     args.frame_interval = 2
@@ -41,7 +41,7 @@ if __name__ == '__main__':
     args.stat_type = 'spatiotemp' # temp, spatiotemp
 
     args.corruptions = 'clean'
-    args.result_dir = f'/scratch/project_465001897/datasets/uffia/source_statistics_tanet'
+    args.result_dir = f'/scratch/project_465001897/datasets/ucf/source_statistics_tanet'
     eval(args=args, )
 
 
