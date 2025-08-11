@@ -141,34 +141,12 @@ if __name__ == '__main__':
     args.if_sample_tta_aug_views = True
     args.batch_size = 1  # Default to 1 for TTA, can be overridden
 
-    # Fail-Forward Probing (FFP) configuration
+    # Fail-Forward Probing (FFP)
     args.probe_ffp_enable = True
-    args.probe_ffp_steps = 1
+    args.probe_ffp_steps = 2
     args.probe_conf_thresh = 0.6
-    args.probe_amp = True
+    args.probe_amp = False
     args.probe_max_backoff = 1
-
-    # --- Ablation presets (uncomment ONE block to use) ---
-    # Preset A: Aggressive warmup (more probe passes, lower threshold)
-    # args.probe_ffp_enable = True
-    # args.probe_ffp_steps = 3
-    # args.probe_conf_thresh = 0.5
-    # args.probe_amp = True
-    # args.probe_max_backoff = 2
-
-    # Preset B: Conservative/safer (high confidence requirement)
-    # args.probe_ffp_enable = True
-    # args.probe_ffp_steps = 1
-    # args.probe_conf_thresh = 0.8
-    # args.probe_amp = True
-    # args.probe_max_backoff = 1
-
-    # Preset C: AMP-off stability (debug or older GPUs)
-    # args.probe_ffp_enable = True
-    # args.probe_ffp_steps = 2
-    # args.probe_conf_thresh = 0.6
-    # args.probe_amp = False
-    # args.probe_max_backoff = 1
     
     # Set TTA-specific parameters if in TTA mode
     if args.tta:
@@ -181,10 +159,10 @@ if __name__ == '__main__':
         suffix = f"celoss={args.include_ce_in_consistency}_adaptepoch={args.n_epoch_adapat}"
 
         suffix += f"_views{args.n_augmented_views}_bs{args.batch_size}"
-        # Append FFP settings in suffix for reproducibility
-        suffix += f"_ffp={int(bool(args.probe_ffp_enable))}"
-        if args.probe_ffp_enable:
-            suffix += f"_ffpSteps={args.probe_ffp_steps}_ffpConf={args.probe_conf_thresh}_ffpAmp={int(args.probe_amp)}"
+        # Append FFP probe settings
+        suffix += f"_ffp={int(bool(getattr(args, 'probe_ffp_enable', False)))}"
+        if getattr(args, 'probe_ffp_enable', False):
+            suffix += f"_ffpSteps={args.probe_ffp_steps}_ffpAmp={int(bool(args.probe_amp))}_ffpBackoff={args.probe_max_backoff}_ffpConf={args.probe_conf_thresh}"
 
         args.result_suffix = suffix
     else:

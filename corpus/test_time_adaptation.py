@@ -28,8 +28,6 @@ from models.tanet_models.tanet import TSN
 from models.videoswintransformer_models.recognizer3d import Recognizer3D
 
 
-from timm.models import create_model
-
 from utils.transforms import *
 from utils.utils_ import AverageMeter, accuracy,  get_augmentation
 from utils.BNS_utils import BNFeatureHook, choose_layers
@@ -38,9 +36,8 @@ import os.path as osp
 from utils.pred_consistency_utils import compute_pred_consis
 import copy as cp
 from torch.nn.parallel import DistributedDataParallel
-# from corpus.training import train, validate, validate_brief
+
 from corpus.dataset_utils import get_dataset, get_dataset_tanet, get_dataset_videoswin
-# from corpus.model_utils import get_model
 from corpus.statistics_utils import compute_statistics, compute_cos_similarity, load_precomputed_statistics
 
 def tta_standard(model_origin, criterion, args=None, logger = None, writer =None):
@@ -112,7 +109,6 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
     losses_ce = AverageMeter()
     losses_reg = AverageMeter()
     losses_consis = AverageMeter()
-    losses_distill = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
     pred_concat = []
@@ -188,21 +184,6 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                 # todo ############################################################
                 model = cp.deepcopy(model_origin)
                 
-                # Initialize EMA teacher if enabled
-                ema_teacher = None
-                if hasattr(args, 'use_ema_teacher') and args.use_ema_teacher:
-                    from utils.ema_teacher import EMATeacher
-                    ema_teacher = EMATeacher(
-                        model=model,
-                        momentum=args.ema_momentum,
-                        temperature=args.ema_temperature,
-                        adaptive_temperature=args.ema_adaptive_temp,
-                        min_temperature=args.ema_min_temp,
-                        max_temperature=args.ema_max_temp,
-                        temperature_alpha=args.ema_temp_alpha,
-                        device=device
-                    )
-                    logger.info(f"EMA teacher initialized with momentum={args.ema_momentum}")
                 # when we initialize the model, we have to re-choose the layers from it.
                 if args.arch == 'tanet':
                     # todo  temporal statistics are computed on  nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d
@@ -264,6 +245,7 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                     if logger is not None:
                         logger.info(f"[FFP] Completed {probes_run} forward-only probe pass(es); model warmed up.")
                     model.train(prev_mode)
+
                 # todo ############################################################
                 # todo ##################################### set up the optimizer
                 # todo ############################################################
@@ -282,42 +264,58 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                     base_optimizer = torch.optim.SGD(params=model.parameters(), lr=args.lr, momentum=args.momentum,
                                                 weight_decay=args.weight_decay)
                 
-                logger.info("Using standard optimizer")
+                optimizer = base_optimizer
+                logger.info("Using standard optimizer (no CGMO/CGO)")
+
+                # todo ############################################################
+                # todo #### Adaptive selection of args.chosen_blocks (TANet) based on BN metrics
+                # todo ############################################################
 
                 if args.stat_reg == 'mean_var':
-                    stat_reg_hooks = []
-                    for layer_id, (chosen_layer_name, chosen_layer) in enumerate(chosen_layers):
-                        for block_name in args.chosen_blocks:
-                            if block_name in chosen_layer_name:
-                                stat_reg_hooks.append(
-                                    CombineNormStatsRegHook_onereg(chosen_layer, clip_len=args.clip_length, 
-                                                                   spatiotemp_stats_clean_tuple=(
-                                                                       list_spatiotemp_mean_clean_new[layer_id],
-                                                                       list_spatiotemp_var_clean_new[layer_id]
-                                                                   ),
-                                                                   reg_type=args.reg_type,
-                                                                   moving_avg=args.moving_avg,
-                                                                   momentum=args.momentum_mvg,
-                                                                   stat_type_list=args.stat_type,
-                                                                   reduce_dim=args.reduce_dim,
-                                                                   before_norm=args.before_norm,
-                                                                   if_sample_tta_aug_views=args.if_sample_tta_aug_views,
-                                                                   n_augmented_views=args.n_augmented_views))
-                                break
+                    if isinstance(args.stat_type, str):
+                        raise NotImplementedError(
+                            'args.stat_type of str  is deprecated, use list instead. To add the implementation for case of Video swin transformer. ')
+                    elif isinstance(args.stat_type, list):
+                        stat_reg_hooks = []
+                        for layer_id, (chosen_layer_name, chosen_layer) in enumerate(chosen_layers):
+                            for block_name in args.chosen_blocks:
+                                if block_name in chosen_layer_name:
+                                    stat_reg_hooks.append(
+                                        CombineNormStatsRegHook_onereg(chosen_layer, clip_len=args.clip_length, # todo load statistcs, initialize the average meter
+                                                                       spatiotemp_stats_clean_tuple=(
+                                                                           list_spatiotemp_mean_clean_new[layer_id],
+                                                                           list_spatiotemp_var_clean_new[layer_id]),
+                                                                       reg_type=args.reg_type,
+                                                                       moving_avg=args.moving_avg,
+                                                                       momentum=args.momentum_mvg,
+                                                                       stat_type_list=args.stat_type,
+                                                                       reduce_dim=args.reduce_dim,
+                                                                       before_norm=args.before_norm,
+                                                                       if_sample_tta_aug_views=args.if_sample_tta_aug_views,
+                                                                       n_augmented_views=args.n_augmented_views))
+                                    break
                 elif args.stat_reg == 'BNS':
+                    # todo  regularization on BNS statistics
+                    # regularization on BNS statistics
+                    # bns_feature_hooks = []
                     stat_reg_hooks = []
                     chosen_layers = choose_layers(model, candidate_bn_layers)
+                    # for chosen_layer in chosen_layers:
                     for layer_id, (chosen_layer_name, chosen_layer) in enumerate(chosen_layers):
                         for block_name in args.chosen_blocks:
                             if block_name in chosen_layer_name:
-                                stat_reg_hooks.append(
-                                    BNFeatureHook(chosen_layer, reg_type= args.reg_type, running_manner=args.running_manner,
+                                # regularization between manually computed target batch statistics (whether or not in running manner) between source statistics
+                                stat_reg_hooks.append(BNFeatureHook(chosen_layer, reg_type= args.reg_type, running_manner=args.running_manner,
                                                   use_src_stat_in_reg=args.use_src_stat_in_reg, momentum=args.momentum_bns))
                 else:
                     raise Exception(f'undefined regularization type {args.stat_reg}')
 
-            model.train()  
-            if args.fix_BNS:  
+
+            # todo ############################################################
+            # todo ##################################### set the model to train mode,  freeze BN statistics
+            # todo ############################################################
+            model.train()  # BN layers are set to train mode
+            if args.fix_BNS:  # fix the BNS during forward pass
                 for m in model.modules():
                     for candidate in candidate_bn_layers:
                         if isinstance(m, candidate):
@@ -325,7 +323,10 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
             actual_bz = input.shape[0]
             input = input.to(device)
             target = target.to(device)
-            
+
+            # todo ############################################################
+            # todo ##################################### reshape the input
+            # todo ############################################################
             if args.arch == 'tanet':
                 input = input.view(-1, 3, input.size(2), input.size(3))
                 if args.if_sample_tta_aug_views:
@@ -336,13 +337,16 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                 pass
             else:
                 raise NotImplementedError(f'Incorrect model type {args.arch}')
-            
+
+            # todo ############################################################
+            # todo ##################################### train on one sample for multiple steps
+            # todo ############################################################
             n_gradient_steps = args.n_gradient_steps
             for step_id in range(n_gradient_steps):
                 if args.arch == 'tanet':
                     raw_output = model(input)
                     if args.if_sample_tta_aug_views:
-                        raw_output = raw_output.reshape(actual_bz, args.test_crops * n_augmented_views, -1)  
+                        raw_output = raw_output.reshape(actual_bz, args.test_crops * n_augmented_views, -1)  # (N, n_views, n_class )
                         if if_pred_consistency:
                             loss_consis = compute_pred_consis(raw_output)
                         output = raw_output.mean(1)
@@ -354,9 +358,10 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                         n_views = args.test_crops * n_augmented_views
                     else:
                         n_views = args.test_crops * n_clips
+                    # input = input.view(-1, n_views, 3, args.clip_length, input.size(3), input.size(4))
                     if args.if_sample_tta_aug_views:
                         if if_pred_consistency:
-                            raw_output, view_cls_score = model( input)  
+                            raw_output, view_cls_score = model( input)  # (batch, n_views, C, T, H, W) ->  (batch, n_class), todo outputs are unnormalized scores
                             loss_consis = compute_pred_consis(view_cls_score)
                     else:
                         raw_output, _ = model( input)
@@ -373,30 +378,54 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                 else:
                     raise Exception(f'undefined regularization type {args.stat_reg}')
                 
-                loss = loss_ce + args.lambda_feature_reg * loss_reg
+                # Compute total loss
+                loss_components = []
+                
+                # Always include feature regularization
+                loss_components.append(args.lambda_feature_reg * loss_reg)
+                
+                # Include prediction consistency if enabled
+                if if_pred_consistency:
+                    loss_components.append(args.lambda_pred_consis * loss_consis)
+                    
+                    # Conditionally include CE loss when using consistency
+                    if hasattr(args, 'include_ce_in_consistency') and args.include_ce_in_consistency:
+                        loss_components.append(loss_ce)
+                # else:
+                #     # Always include CE loss when no consistency
+                #     loss_components.append(loss_ce)
+                
+                loss = sum(loss_components)
 
-                base_optimizer.zero_grad()
+                optimizer.zero_grad()
                 loss.backward()
-                base_optimizer.step()
+                optimizer.step()
 
-                # Reset hook features to detach previous graph and avoid double-backward issues
-                if args.stat_reg and stat_reg_hooks:
-                    for _h in stat_reg_hooks:
-                        try:
-                            _h.r_feature = _h.r_feature.detach() * 0.0
-                        except Exception:
-                            _h.r_feature = torch.tensor(0.0, device=device)
+                losses_ce.update(loss_ce.item(), actual_bz)
+                losses_reg.update(loss_reg.item(), actual_bz)
+                if if_pred_consistency:
+                    losses_consis.update(loss_consis.item(), actual_bz)
 
+            # todo ############################################################
+            # todo ##################################### remove all the hooks, no computation of statistics during inference
+            # todo ############################################################
             if args.stat_reg:
                 for stat_reg_hook in stat_reg_hooks:
                     stat_reg_hook.close()
+            else:
+                raise Exception(f'undefined regularization type {args.stat_reg}')
 
+            # todo ##########################################################################################
+            # todo ################### Inference on evaluation batch (only for last epoch) ##############################################
+            # todo ##########################################################################################
+            # Only evaluate on the last epoch to avoid exhausting the eval_loader_iterator
             if epoch_id == args.n_epoch_adapat - 1:
                 model.eval()
                 with torch.no_grad():
                     try:
                         eval_input, eval_target = next(eval_loader_iterator)
                     except StopIteration:
+                        # If eval_loader is exhausted, reinitialize it
                         eval_loader_iterator = iter(eval_loader)
                         eval_input, eval_target = next(eval_loader_iterator)
                     
@@ -404,14 +433,19 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                     actual_eval_bz = eval_input.shape[0]
                     
                     if args.arch == 'tanet':
+                        # (actual_bz, C* spatial_crops * temporal_clips* clip_len, 256, 256) ->   (actual_bz * spatial_crops * temporal_clips* clip_len,  C, 256, 256)
                         eval_input = eval_input.view(-1, 3, eval_input.size(2), eval_input.size(3))
                         eval_input = eval_input.view(actual_eval_bz * args.test_crops * n_clips,
-                                           args.clip_length, 3, eval_input.size(2), eval_input.size(3))  
-                        output = model(eval_input)  
+                                           args.clip_length, 3, eval_input.size(2), eval_input.size(3))  # (actual_bz * spatial_crops * temporal_clips* clip_len,  C, 256, 256) -> (actual_bz * spatial_crops * temporal_clips,  clip_len,  C, 256, 256)
+                        output = model(eval_input)  # (actual_bz * spatial_crops * temporal_clips, clip_len,  C, 256, 256)   ->     (actual_bz * spatial_crops * temporal_clips,       n_class )
+                        # take the average among all spatial_crops * temporal_clips,   (actual_bz * spatial_crops * temporal_clips,       n_class )  ->   (actual_bz,       n_class )
                         output = output.reshape(actual_eval_bz, args.test_crops * n_clips, -1).mean(1)
                     elif args.arch == 'videoswintransformer':
+                        # the format shape is N C T H W         if  collapse in datsaet is True, then shape is  (actual_bz,   C* spatial_crops * temporal_clips* clip_len,    256,     256)
+                        # (batch, n_views, C, T, H, W)
                         n_views = args.test_crops * n_clips
-                        output, _ = model(eval_input)  
+                        # eval_input = eval_input.view(-1, n_views, 3, args.clip_length, eval_input.size(3), eval_input.size(4))
+                        output, _ = model(eval_input)  # (batch, n_views, C, T, H, W) ->  (batch, n_class), todo outputs are unnormalized scores
                     else:
                         raise NotImplementedError(f'Incorrect model type {args.arch}')
                     prec1, prec5 = accuracy(output.data, eval_target, topk=(1, 5))
@@ -421,15 +455,27 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                 batch_time.update(time.time() - end)
                 end = time.time()
 
-                if args.verbose:
-                    logger.debug(('TTA Epoch{epoch}: [{0}/{1}]\t'
-                                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                                  'Loss reg {loss_reg.val:.4f} ({loss_reg.avg:.4f})\t'
-                                  'Loss consis {loss_consis.val:.4f} ({loss_consis.avg:.4f})\t'
-                                  'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                                  'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
-                        batch_id, len(tta_loader), epoch=epoch_id+1, batch_time=batch_time, loss_reg=losses_reg, loss_consis=losses_consis,
-                        top1=top1, top5=top5)))
+            # todo ##########################################################################################
+            # todo ################### In the case of tta_online, after inference, add the hooks back  ##############################################
+            # todo ##########################################################################################
+            if args.if_tta_standard == 'tta_online':
+                hook_layer_counter = 0
+                for layer_id, (chosen_layer_name, chosen_layer) in enumerate(chosen_layers):
+                    for block_name in args.chosen_blocks:
+                        if block_name in chosen_layer_name:
+                            stat_reg_hooks[hook_layer_counter].add_hook_back(chosen_layer)
+                            hook_layer_counter += 1
+                assert hook_layer_counter == len(stat_reg_hooks)
+
+            if args.verbose:
+                logger.debug(('TTA Epoch{epoch}: [{0}/{1}]\t'
+                              'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                              'Loss reg {loss_reg.val:.4f} ({loss_reg.avg:.4f})\t'
+                              'Loss consis {loss_consis.val:.4f} ({loss_consis.avg:.4f})\t'
+                              'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
+                              'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+                    batch_id, len(tta_loader), epoch=epoch_id+1, batch_time=batch_time, loss_reg=losses_reg, loss_consis=losses_consis,
+                    top1=top1, top5=top5)))
 
     epoch_result_list.append(top1.avg)
     
