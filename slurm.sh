@@ -19,5 +19,5 @@ conda activate ttadapt
 # Set the working directory
 cd /users/doloriel/work/Repo/ViTTA
 
-# Run the Python scripta
+# Run the Python script
 python -m main_tta_ucf

@@ -20,6 +20,7 @@ def set_seed(seed=42):
 # Enable memory optimization
 torch.cuda.empty_cache()
 
+
 def get_model_config(arch, dataset='somethingv2', tta_mode=True):
     """Get model configuration based on architecture and dataset.
     
@@ -57,7 +58,7 @@ def get_model_config(arch, dataset='somethingv2', tta_mode=True):
             if tta_mode:
                 config.update({
                     'spatiotemp_mean_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_swin/list_spatiotemp_mean_20221004_192722.npy',
-                    'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_swin/list_spatiot_var_20221004_192722.npy',
+                    'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ucf/source_statistics_swin/list_spatiotemp_var_20221004_192722.npy',
                     'additional_args': {
                         **config['additional_args'],
                         'chosen_blocks': ['module.backbone.layers.2', 'module.backbone.layers.3', 'module.backbone.norm'],
@@ -128,7 +129,7 @@ if __name__ == '__main__':
     args.clip_length = 16
     args.test_crops = 3
     args.num_clips = 1
-    args.scale_size = 256
+    args.scale_size = 256 # 256 for TANet, 224 for VideoSwin
     # args.crop_size = 256
     args.input_size = 224
 
@@ -141,28 +142,190 @@ if __name__ == '__main__':
     args.if_sample_tta_aug_views = True
     args.batch_size = 1  # Default to 1 for TTA, can be overridden
 
-    # Fail-Forward Probing (FFP)
-    args.probe_ffp_enable = True
-    args.probe_ffp_steps = 2
-    args.probe_conf_thresh = 0.6
-    args.probe_amp = False
-    args.probe_max_backoff = 1
     
+    # ========================= Ablation Presets (uncomment ONE group) ==========================
+    # Group 1A: Baseline (no PAP/SBM) — source-only forward; useful control
+    # args.probe_ffp_enable = False
+    # args.probe_cg_bnmm_enable = False
+    # args.probe_sbm_tcsm_enable = False
+    # args.n_epoch_adapat = 1
+
+    # Group 1B: Baseline (no PAP/SBM) — source-only forward; useful control
+    # args.probe_ffp_enable = False
+    # args.probe_cg_bnmm_enable = False
+    # args.probe_sbm_tcsm_enable = False
+    # args.n_epoch_adapat = 2
+
+    # Group 2A: PAP only — forward-only warmup without momentum modulation
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = False
+    # args.probe_sbm_tcsm_enable = False
+    # args.probe_ffp_steps = 2
+    # args.n_epoch_adapat = 1
+
+    # Group 2B: PAP only — forward-only warmup without momentum modulation
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = False
+    # args.probe_sbm_tcsm_enable = False
+    # args.probe_ffp_steps = 4
+    # args.n_epoch_adapat = 2
+
+    # Group 3: PAP + SBM (IID) — stochastic momentum per pass, no temporal correlation
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = True
+    # args.probe_sbm_tcsm_enable = False
+    # args.probe_ffp_steps = 3
+    # args.n_epoch_adapat = 1
+    # args.probe_sbm_rho = 0.8   # unused in IID but kept for completeness
+    # args.probe_sbm_init = 0.5
+
+    # Group 4: PAP + SBM + TCSM (moderate correlation)
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = True
+    # args.probe_sbm_tcsm_enable = True
+    # args.probe_sbm_rho = 0.4
+    # args.probe_sbm_init = 0.5
+    # args.probe_ffp_steps = 3
+    # args.n_epoch_adapat = 1
+
+    # Group 5: PAP + SBM + TCSM (high correlation, longer warmup, multi-epoch TTA)
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = True
+    # args.probe_sbm_tcsm_enable = True
+    # args.probe_sbm_rho = 0.9
+    # args.probe_sbm_init = 0.6
+    # args.probe_ffp_steps = 4
+    # args.n_epoch_adapat = 2
+    
+    # Group 6: PAP + SBM + TCSM (low correlation)
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = True
+    # args.probe_sbm_tcsm_enable = True
+    # args.probe_sbm_rho = 0.2
+    # args.probe_sbm_init = 0.5
+    # args.probe_ffp_steps = 3
+    # args.n_epoch_adapat = 1
+
+    # Group 7: PAP + SBM + TCSM (mid correlation, high init bias)
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = True
+    # args.probe_sbm_tcsm_enable = True
+    # args.probe_sbm_rho = 0.7
+    # args.probe_sbm_init = 0.8
+    # args.probe_ffp_steps = 3
+    # args.n_epoch_adapat = 1
+
+    # Group 8: Based on Group 5 
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = True
+    # args.probe_sbm_tcsm_enable = True
+    # args.probe_sbm_rho = 0.6
+    # args.probe_sbm_init = 0.6
+    # args.probe_ffp_steps = 4
+    # args.n_epoch_adapat = 2
+
+    # Group 9: Based on Group 5 
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = True
+    # args.probe_sbm_tcsm_enable = True
+    # args.probe_sbm_rho = 0.3
+    # args.probe_sbm_init = 0.6
+    # args.probe_ffp_steps = 4
+    # args.n_epoch_adapat = 2
+
+    # Group 10: Based on Group 9
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = True
+    # args.probe_sbm_tcsm_enable = True
+    # args.probe_sbm_rho = 0.6
+    # args.probe_sbm_init = 0.3
+    # args.probe_ffp_steps = 4
+    # args.n_epoch_adapat = 2
+
+    # Group 11: Based on Group 9
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = True
+    # args.probe_sbm_tcsm_enable = True
+    # args.probe_sbm_rho = 0.6
+    # args.probe_sbm_init = 0.9
+    # args.probe_ffp_steps = 4
+    # args.n_epoch_adapat = 2
+
+    # Group 12: Based on Group 10
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = True
+    # args.probe_sbm_tcsm_enable = True
+    # args.probe_sbm_rho = 0.3
+    # args.probe_sbm_init = 0.3
+    # args.probe_ffp_steps = 4
+    # args.n_epoch_adapat = 2
+
+    # Group 13: Based on Group 10
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = True
+    # args.probe_sbm_tcsm_enable = True
+    # args.probe_sbm_rho = 0.9
+    # args.probe_sbm_init = 0.3
+    # args.probe_ffp_steps = 4
+    # args.n_epoch_adapat = 2
+
+    # Group 14: Based on Group 13
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = True
+    # args.probe_sbm_tcsm_enable = True
+    # args.probe_sbm_rho = 0.9
+    # args.probe_sbm_init = 0.3
+    # args.probe_ffp_steps = 2
+    # args.n_epoch_adapat = 2
+
+    # Group 15: Based on Group 13
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = True
+    # args.probe_sbm_tcsm_enable = True
+    # args.probe_sbm_rho = 0.9
+    # args.probe_sbm_init = 0.3
+    # args.probe_ffp_steps = 1
+    # args.n_epoch_adapat = 2
+
+    # Group 16: Based on Group 13
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = True
+    # args.probe_sbm_tcsm_enable = True
+    # args.probe_sbm_rho = 0.9
+    # args.probe_sbm_init = 0.3
+    # args.probe_ffp_steps = 4
+    # args.n_epoch_adapat = 1
+
+    # Group 17: Based on Group 13
+    args.probe_ffp_enable = True
+    args.probe_cg_bnmm_enable = True
+    args.probe_sbm_tcsm_enable = True
+    args.probe_sbm_rho = 0.9
+    args.probe_sbm_init = 0.3
+    args.probe_ffp_steps = 4
+    args.n_epoch_adapat = 3
+
+    # ============================================================================================
+
     # Set TTA-specific parameters if in TTA mode
     if args.tta:
         args.spatiotemp_mean_clean_file = model_config['spatiotemp_mean_clean_file']
         args.spatiotemp_var_clean_file = model_config['spatiotemp_var_clean_file']
-        args.n_epoch_adapat = 1
         print(f"Multi-epoch TTA enabled: Using {args.n_epoch_adapat} adaptation epochs")
 
         args.include_ce_in_consistency = False
         suffix = f"celoss={args.include_ce_in_consistency}_adaptepoch={args.n_epoch_adapat}"
 
         suffix += f"_views{args.n_augmented_views}_bs{args.batch_size}"
-        # Append FFP probe settings
+        # Append PAP probe settings
         suffix += f"_ffp={int(bool(getattr(args, 'probe_ffp_enable', False)))}"
         if getattr(args, 'probe_ffp_enable', False):
             suffix += f"_ffpSteps={args.probe_ffp_steps}_ffpAmp={int(bool(args.probe_amp))}_ffpBackoff={args.probe_max_backoff}_ffpConf={args.probe_conf_thresh}"
+            # Append SBM/TCSM flags if enabled
+            if getattr(args, 'probe_cg_bnmm_enable', False):
+                suffix += f"_sbm=1"
+                if getattr(args, 'probe_sbm_tcsm_enable', False):
+                    suffix += f"_tcsm=1_rho={args.probe_sbm_rho}"
 
         args.result_suffix = suffix
     else:
@@ -173,16 +336,16 @@ if __name__ == '__main__':
 
     # Set up corruption types to evaluate
     # corruptions = ['random_mini', 'gauss_mini']
-    # corruptions = ['gauss_mini', 'pepper_mini', 'salt_mini','shot_mini',
-    #             'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
-    #             'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
-    #             'random_mini'  
-    #             ]
-    corruptions = ['gauss', 'pepper', 'salt','shot',
-                'zoom', 'impulse', 'defocus', 'motion',
-                'jpeg', 'contrast', 'rain', 'h265_abr',
-                'random'  
+    corruptions = ['gauss_mini', 'pepper_mini', 'salt_mini','shot_mini',
+                'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
+                'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
+                'random_mini'  
                 ]
+    # corruptions = ['gauss', 'pepper', 'salt','shot',
+    #             'zoom', 'impulse', 'defocus', 'motion',
+    #             'jpeg', 'contrast', 'rain', 'h265_abr',
+    #             'random'  
+    #             ]
     
     # Set up result directory based on evaluation mode
     if args.tta:

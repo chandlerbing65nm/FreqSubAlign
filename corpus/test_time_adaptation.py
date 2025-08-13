@@ -200,17 +200,50 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                     chosen_layers = choose_layers(model, candidate_layers)
                     chosen_layers = chosen_layers[1:]
 
-                # ========================= Fail-Forward Probing (FFP) ==========================
+                # ========================= Pre-Adaptation Probing (PAP) ==========================
                 # Forward-only warmup to initialize runtime states (allocator, BN buffers, AMP/loss-scale) before adaptation
                 if getattr(args, 'probe_ffp_enable', False):
                     prev_mode = model.training
-                    model.train(True)  # ensure BN running stats can update
+                    model.train(True)  # ensure BN running stats can update (BN-specific)
+
+                    # Optional: Stochastic BatchNorm Momentum (SBM)
+                    # Modes: IID random gate in [0,1] or Temporally-Correlated Stochastic Momentum (TCSM)
+                    use_cg_bnmm = bool(getattr(args, 'probe_cg_bnmm_enable', False)) and (args.arch == 'tanet')
+                    mom_min = 0.01
+                    mom_max = 0.10
+                    # TCSM controls
+                    tcsm_enable = bool(getattr(args, 'probe_sbm_tcsm_enable', False))
+                    tcsm_rho = float(getattr(args, 'probe_sbm_rho', 0.8))
+                    tcsm_prev_gate = float(getattr(args, 'probe_sbm_init', 0.5))
+
+                    # Track original BN momentum to restore after probes
+                    orig_momentum = {}
+                    if use_cg_bnmm:
+                        for layer_name, layer in chosen_layers:
+                            if isinstance(layer, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
+                                orig_momentum[layer_name] = layer.momentum
+
                     probes_run = 0
                     backoff_used = 0
+
+                    # Initialize per-layer momentum for first pass
+                    next_momentum = {}
+                    if use_cg_bnmm:
+                        init_m = (mom_min + mom_max) * 0.5
+                        for layer_name, layer in chosen_layers:
+                            if isinstance(layer, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
+                                next_momentum[layer_name] = init_m
+
                     for k in range(int(getattr(args, 'probe_ffp_steps', 1))):
                         try:
                             with torch.no_grad():
-                                # Use current batch as probe input; optionally could sub-sample later if we add richer backoff
+                                # Apply per-layer momentum before this probe forward
+                                if use_cg_bnmm:
+                                    for layer_name, layer in chosen_layers:
+                                        if isinstance(layer, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)) and layer_name in next_momentum:
+                                            layer.momentum = float(next_momentum[layer_name])
+
+                                # Use current batch as probe input (forward-only)
                                 x_probe = input
                                 use_amp = bool(getattr(args, 'probe_amp', True))
                                 if use_amp and torch.cuda.is_available():
@@ -219,31 +252,64 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                                         y = model(x_probe)
                                 else:
                                     y = model(x_probe)
-                                # Confidence gating for BN update interpretation (BN updated automatically due to train+no_grad)
-                                conf = torch.softmax(y, dim=-1).max(dim=-1)[0].mean().item()
+
+                                # Compute SBM gate in [0,1] for PAP momentum modulation
+                                if tcsm_enable:
+                                    # Temporally-Correlated: convex-combination AR(1)-like update
+                                    u = float(torch.rand(1).item())
+                                    conf = float(tcsm_rho * tcsm_prev_gate + (1.0 - tcsm_rho) * u)
+                                    conf = min(max(conf, 0.0), 1.0)
+                                    tcsm_prev_gate = conf
+                                else:
+                                    # IID random gate
+                                    conf = 1 #float(torch.rand(1).item())
+
+                                # Update per-layer momentum for the next pass using Stochastic-Gated BatchNorm Momentum
+                                if use_cg_bnmm:
+                                    # Confidence-only trust -> per-layer momentum
+                                    updated_momentum = {}
+                                    trust = float(min(max(conf, 0.0), 1.0))
+                                    for layer_name, layer in chosen_layers:
+                                        if not isinstance(layer, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
+                                            continue
+                                        m_val = mom_min + trust * (mom_max - mom_min)
+                                        updated_momentum[layer_name] = m_val
+                                    next_momentum = updated_momentum
+
                                 if logger is not None:
-                                    logger.debug(f"[FFP] probe {k+1}: conf={conf:.4f}, amp={use_amp}")
-                                # If confidence is very low, we could consider temporarily disabling BN momentum, but keep simple for now
+                                    if use_cg_bnmm:
+                                        avg_m = np.mean(list(next_momentum.values())) if len(next_momentum) > 0 else float('nan')
+                                        mode = 'TCSM' if tcsm_enable else 'IID'
+                                        logger.debug(f"[PAP][Stochastic BatchNorm Momentum:{mode}] probe {k+1}: gate={conf:.4f}, avg_momentum={avg_m:.4f}, amp={use_amp}")
+                                    else:
+                                        logger.debug(f"[PAP] probe {k+1}: gate={conf:.4f}, amp={use_amp}")
+
                                 probes_run += 1
                         except RuntimeError as e:
                             if 'out of memory' in str(e).lower():
                                 torch.cuda.empty_cache()
                                 backoff_used += 1
                                 if logger is not None:
-                                    logger.warning(f"[FFP] OOM during probe pass {k+1}. Backoff {backoff_used}/{getattr(args, 'probe_max_backoff', 1)}; skipping remaining probes.")
+                                    logger.warning(f"[PAP] OOM during probe pass {k+1}. Backoff {backoff_used}/{getattr(args, 'probe_max_backoff', 1)}; skipping remaining probes.")
                                 if backoff_used >= int(getattr(args, 'probe_max_backoff', 1)):
                                     break
                             else:
-                                # Non-OOM errors: log and stop FFP
                                 if logger is not None:
-                                    logger.warning(f"[FFP] Probe error: {e}")
+                                    logger.warning(f"[PAP] Probe error: {e}")
                                 break
                         except Exception as e:
                             if logger is not None:
-                                logger.warning(f"[FFP] Probe exception: {e}")
+                                logger.warning(f"[PAP] Probe exception: {e}")
                             break
+
+                    # Restore BN momentum
+                    if use_cg_bnmm:
+                        for layer_name, layer in chosen_layers:
+                            if isinstance(layer, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)) and layer_name in orig_momentum:
+                                layer.momentum = orig_momentum[layer_name]
+
                     if logger is not None:
-                        logger.info(f"[FFP] Completed {probes_run} forward-only probe pass(es); model warmed up.")
+                        logger.info(f"[PAP] Completed {probes_run} forward-only probe pass(es); model warmed up.")
                     model.train(prev_mode)
 
                 # todo ############################################################

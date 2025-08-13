@@ -126,7 +126,7 @@ parser.add_argument('--moving_avg', type=bool, default=True)
 parser.add_argument('--n_gradient_steps', type=int, default=1,
                     help='number of gradient steps per sample')
 
-# ========================= Fail-Forward Probing (FFP) ==========================
+# ========================= Pre-Adaptation Probing (PAP) ==========================
 parser.add_argument('--probe_ffp_enable', type=bool, default=True,
                     help='Enable Fail-Forward Probing: forward-only warmup before adaptation to initialize runtime states (BN/AMP/autotune)')
 parser.add_argument('--probe_ffp_steps', type=int, default=1,
@@ -138,46 +138,9 @@ parser.add_argument('--probe_amp', type=bool, default=True,
 parser.add_argument('--probe_max_backoff', type=int, default=1,
                     help='Max backoff attempts on OOM during probe (currently used to skip remaining probes)')
 
-# ========================= Confidence-Gated Optimizer (CGO) Configuration ==========================    # CGO arguments
-parser.add_argument('--use_cgo', action='store_true',
-                    help='Enable Confidence-Gated Optimizer (CGO)')
-parser.add_argument('--cgo_confidence_threshold', type=float, default=0.7,
-                    help='Confidence threshold for CGO (default: 0.7)')
-parser.add_argument('--cgo_confidence_metric', type=str, default='max_softmax',
-                    choices=['max_softmax', 'entropy'],
-                    help='Confidence metric for CGO (default: max_softmax)')
-
-# CGMO (Meta-Optimizer) arguments
-parser.add_argument('--use_cgmo', action='store_true',
-                    help='Enable Confidence-Gated Meta-Optimizer (CGMO) - surpasses vanilla TTA')
-parser.add_argument('--cgmo_confidence_threshold', type=float, default=0.5,
-                    help='Confidence threshold for CGMO (default: 0.5)')
-parser.add_argument('--cgmo_min_lr_scale', type=float, default=0.1,
-                    help='Minimum learning rate scaling for CGMO (default: 0.1)')
-parser.add_argument('--cgmo_max_lr_scale', type=float, default=2.0,
-                    help='Maximum learning rate scaling for CGMO (default: 2.0)')
-parser.add_argument('--cgmo_confidence_power', type=float, default=2.5,
-                        help='Power for confidence scaling in CGMO')
-parser.add_argument('--cgmo_enable_momentum_correction', action='store_true',
-                        help='Enable momentum correction in CGMO')
-parser.add_argument('--cgmo_adaptive_threshold', action='store_true',
-                        help='Enable adaptive threshold in CGMO')
-
-# CIMO (Confidence-Inverted Meta-Optimizer) arguments
-parser.add_argument('--use_cimo', action='store_true',
-                        help='Use Confidence-Inverted Meta-Optimizer (CIMO)')
-parser.add_argument('--cimo_confidence_threshold', type=float, default=0.3,
-                        help='Confidence threshold for CIMO (inverted logic)')
-parser.add_argument('--cimo_min_lr_scale', type=float, default=0.1,
-                        help='Minimum learning rate scaling for CIMO')
-parser.add_argument('--cimo_max_lr_scale', type=float, default=3.0,
-                        help='Maximum learning rate scaling for CIMO (higher for low confidence)')
-parser.add_argument('--cimo_confidence_power', type=float, default=2.0,
-                        help='Power for inverted confidence scaling in CIMO')
-parser.add_argument('--cimo_enable_momentum_correction', action='store_true',
-                        help='Enable momentum correction in CIMO')
-parser.add_argument('--cimo_adaptive', action='store_true',
-                        help='Enable adaptive threshold in CIMO')
+# ========================= PAP: Stochastic-Gated BatchNorm Momentum ==========================
+parser.add_argument('--probe_cg_bnmm_enable', type=bool, default=False,
+                    help='Enable stochastic (random 0-1) per-layer BatchNorm momentum modulation during PAP (BN models, e.g., TANet)')
 
 # ========================= Input Configuration ==========================
 parser.add_argument('--full_res', action='store_true')
@@ -198,30 +161,6 @@ parser.add_argument('--input_std', default=input_std)
 parser.add_argument('--lr', default=0.00005)
 parser.add_argument('--n_epoch_adapat', type=int, default=1,
                     help='number of adaptation epochs for TTA (default: 1 for backward compatibility)')
-
-# ========================= EMA Teacher Configuration ==========================
-parser.add_argument('--use_ema_teacher', action='store_true',
-                    help='Enable EMA teacher for self-distillation')
-parser.add_argument('--ema_momentum', type=float, default=0.999,
-                    help='EMA momentum for teacher updates (default: 0.999)')
-parser.add_argument('--ema_temperature', type=float, default=4.0,
-                    help='Temperature for soft targets (default: 4.0)')
-parser.add_argument('--ema_adaptive_temp', action='store_true',
-                    help='Enable adaptive temperature based on confidence')
-parser.add_argument('--ema_min_temp', type=float, default=1.0,
-                    help='Minimum temperature for adaptive scaling (default: 1.0)')
-parser.add_argument('--ema_max_temp', type=float, default=8.0,
-                    help='Maximum temperature for adaptive scaling (default: 8.0)')
-parser.add_argument('--ema_temp_alpha', type=float, default=2.0,
-                    help='Temperature adaptation scaling factor (default: 2.0)')
-parser.add_argument('--lambda_distill', type=float, default=1.0,
-                    help='Weight for distillation loss (default: 1.0)')
-parser.add_argument('--distill_conf_power', type=float, default=1.5,
-                    help='Exponent p for confidence-inverted weighting: weight=(1-conf)^p (default: 1.5)')
-parser.add_argument('--ema_distill_conf_thresh', type=float, default=1.0,
-                    help='Apply distillation only to samples with confidence < thresh (default: 1.0 disables gating)')
-parser.add_argument('--ema_distill_warmup_steps', type=int, default=0,
-                    help='Number of initial adaptation steps to skip distillation (per-sample loop) (default: 0)')
 parser.add_argument('--momentum', default=0.9, type=float,
                     help='momentum')
 parser.add_argument('--weight-decay', '--wd', default=5e-4, type=float,
