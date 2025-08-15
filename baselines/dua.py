@@ -3,6 +3,7 @@ from utils.utils_ import *
 # from corpus.main_train import validate_brief
 from corpus.training import train, validate, validate_brief
 from baselines.dua_utils import rotate_batch
+from utils.pap_tcsm import run_pap_warmup
 
 
 def DUA(model):
@@ -43,8 +44,25 @@ def dua_adaptation(args, model, te_loader, adapt_loader, logger, batchsize, augm
             # Normalize later in the DUA adaptation loop after making a batch
         ])
     logger.debug('---- Starting adaptation for DUA ----')
+    did_pap = False
     all_acc = []
     for i, (inputs, target) in enumerate(adapt_loader):
+        # Optional PAP/TCSM warm-up once before adaptation loop
+        if (not did_pap) and getattr(args, 'probe_ffp_enable', False):
+            if args.arch == 'tanet':
+                x_probe = inputs.cuda()
+                actual_bz_probe = x_probe.shape[0]
+                x_probe = x_probe.view(-1, 3, x_probe.size(2), x_probe.size(3))
+                frames_total_probe = x_probe.shape[0]
+                frames_per_sample_probe = frames_total_probe // actual_bz_probe
+                num_clips_probe = max(1, frames_per_sample_probe // args.clip_length)
+                x_probe = x_probe.view(actual_bz_probe * num_clips_probe,
+                                       args.clip_length, 3, x_probe.size(2), x_probe.size(3))
+            else:
+                x_probe = inputs.cuda()
+                x_probe = x_probe.reshape((-1,) + x_probe.shape[2:])
+            _ = run_pap_warmup(model, x_probe, args, logger)
+            did_pap = True
         model.train()
         for m in model.modules():
             if isinstance(m, nn.modules.batchnorm._BatchNorm):
@@ -52,13 +70,18 @@ def dua_adaptation(args, model, te_loader, adapt_loader, logger, batchsize, augm
 
         with torch.no_grad():
             if args.arch == 'tanet':
-                n_clips = int(args.sample_style.split("-")[-1])
                 inputs = inputs.cuda()
                 actual_bz = inputs.shape[0]
 
+                # inputs comes as [B, 3*T*(crops? clips?), H, W] after Stack_TANet.
+                # First, split channel-time into frames: [B*T*(crops? clips?), 3, H, W]
                 inputs = inputs.view(-1, 3, inputs.size(2), inputs.size(3))
-                inputs = inputs.view(actual_bz * args.test_crops * n_clips,
-                                     args.clip_length, 3, inputs.size(2), inputs.size(3))  # [1, 16, 3, 224, 224]
+                # Infer frames-per-sample and number of clips to avoid mismatches when test_crops are absent in adapt_loader
+                frames_total = inputs.shape[0]
+                frames_per_sample = frames_total // actual_bz
+                num_clips_calc = max(1, frames_per_sample // args.clip_length)
+                inputs = inputs.view(actual_bz * num_clips_calc,
+                                     args.clip_length, 3, inputs.size(2), inputs.size(3))  # [*, 16, 3, H, W]
                 inputs = [(adapt_transforms([inputs, target])[0]) for _ in
                           range(batchsize)]  # pass image, label together
                 inputs = torch.stack(inputs)  # only stack images

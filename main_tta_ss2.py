@@ -114,7 +114,7 @@ if __name__ == '__main__':
     dataset_dir = dataset_to_dir.get(args.dataset, args.dataset)
 
     # Choose evaluation mode (TTA or source-only)
-    args.tta = True  # Set to False for source-only evaluation
+    args.tta = False  # Set to False for source-only evaluation
     
     # Get model configuration based on architecture and dataset
     model_config = get_model_config(args.arch, args.dataset, tta_mode=args.tta)
@@ -143,18 +143,32 @@ if __name__ == '__main__':
     args.if_sample_tta_aug_views = True
     args.batch_size = 1  # Default to 1 for TTA, can be overridden
 
-    # Pre-Adaptation Probing (PAP)
-    args.probe_ffp_enable = False
-    # Stochastic BatchNorm Momentum (SBM)
-    args.probe_cg_bnmm_enable = False
-    # TCSM controls
-    args.probe_sbm_tcsm_enable = False
+    # ========================= Ablation Presets (uncomment ONE group) ==========================
 
-    args.probe_ffp_steps = 2
-    args.n_epoch_adapat = 1
-    args.probe_sbm_rho = 0.8
-    args.probe_sbm_init = 0.5
-    
+    # #Group ViTTA
+    # args.probe_ffp_enable = False
+    # args.probe_cg_bnmm_enable = False
+    # args.probe_sbm_tcsm_enable = False
+    # args.n_epoch_adapat = 2
+
+    # #Group ViTTA + PAP
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = False
+    # args.probe_sbm_tcsm_enable = False
+    # args.probe_ffp_steps = 1
+    # args.n_epoch_adapat = 2
+
+    # #Group ViTTA + PAP + TCSM
+    # args.probe_ffp_enable = True
+    # args.probe_cg_bnmm_enable = True
+    # args.probe_sbm_tcsm_enable = True
+    # args.probe_sbm_rho = 0.9
+    # args.probe_sbm_init = 0.3
+    # args.probe_ffp_steps = 4
+    # args.n_epoch_adapat = 2
+
+    # ============================================================================================
+
     # Set TTA-specific parameters if in TTA mode
     if args.tta:
         args.spatiotemp_mean_clean_file = model_config['spatiotemp_mean_clean_file']
@@ -179,21 +193,21 @@ if __name__ == '__main__':
     else:
         # Source-only evaluation parameters
         args.evaluate_baselines = True
-        args.baseline = 'source'
+        args.baseline = 'dua'
         args.result_suffix=f'tta={args.tta}_evalbaseline={args.evaluate_baselines}_baseline={args.baseline}'
 
     # Set up corruption types to evaluate
 
-    corruptions = ['gauss_mini', 'pepper_mini', 'salt_mini','shot_mini',
-                'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
-                'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
-                'random_mini'  
-                ]
-    # corruptions = ['gauss', 'pepper', 'salt','shot',
-    #             'zoom', 'impulse', 'defocus', 'motion',
-    #             'jpeg', 'contrast', 'rain', 'h265_abr',
-    #             'random'  
+    # corruptions = ['gauss_mini', 'pepper_mini', 'salt_mini','shot_mini',
+    #             'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
+    #             'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
+    #             'random_mini'  
     #             ]
+    corruptions = ['gauss', 'pepper', 'salt','shot',
+                'zoom', 'impulse', 'defocus', 'motion',
+                'jpeg', 'contrast', 'rain', 'h265_abr',
+                'random'  
+                ]
     
     # Set up result directory based on evaluation mode
     if args.tta:

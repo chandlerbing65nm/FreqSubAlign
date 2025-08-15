@@ -113,7 +113,7 @@ if __name__ == '__main__':
     dataset_dir = dataset_to_dir.get(args.dataset, args.dataset)
 
     # Choose evaluation mode (TTA or source-only)
-    args.tta = True  # Set to False for source-only evaluation
+    args.tta = False  # Set to False for source-only evaluation
     
     # Get model configuration based on architecture and dataset
     model_config = get_model_config(args.arch, args.dataset, tta_mode=args.tta)
@@ -144,166 +144,28 @@ if __name__ == '__main__':
 
     
     # ========================= Ablation Presets (uncomment ONE group) ==========================
-    # Group 1A: Baseline (no PAP/SBM) — source-only forward; useful control
+
+    # #Group ViTTA
     # args.probe_ffp_enable = False
     # args.probe_cg_bnmm_enable = False
     # args.probe_sbm_tcsm_enable = False
     # args.n_epoch_adapat = 1
 
-    # Group 1B: Baseline (no PAP/SBM) — source-only forward; useful control
-    # args.probe_ffp_enable = False
-    # args.probe_cg_bnmm_enable = False
-    # args.probe_sbm_tcsm_enable = False
-    # args.n_epoch_adapat = 2
-
-    # Group 2A: PAP only — forward-only warmup without momentum modulation
+    # # Group ViTTA + PAP
     # args.probe_ffp_enable = True
     # args.probe_cg_bnmm_enable = False
     # args.probe_sbm_tcsm_enable = False
-    # args.probe_ffp_steps = 2
-    # args.n_epoch_adapat = 1
-
-    # Group 2B: PAP only — forward-only warmup without momentum modulation
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = False
-    # args.probe_sbm_tcsm_enable = False
-    # args.probe_ffp_steps = 4
-    # args.n_epoch_adapat = 2
-
-    # Group 3: PAP + SBM (IID) — stochastic momentum per pass, no temporal correlation
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = True
-    # args.probe_sbm_tcsm_enable = False
-    # args.probe_ffp_steps = 3
-    # args.n_epoch_adapat = 1
-    # args.probe_sbm_rho = 0.8   # unused in IID but kept for completeness
-    # args.probe_sbm_init = 0.5
-
-    # Group 4: PAP + SBM + TCSM (moderate correlation)
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = True
-    # args.probe_sbm_tcsm_enable = True
-    # args.probe_sbm_rho = 0.4
-    # args.probe_sbm_init = 0.5
-    # args.probe_ffp_steps = 3
-    # args.n_epoch_adapat = 1
-
-    # Group 5: PAP + SBM + TCSM (high correlation, longer warmup, multi-epoch TTA)
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = True
-    # args.probe_sbm_tcsm_enable = True
-    # args.probe_sbm_rho = 0.9
-    # args.probe_sbm_init = 0.6
-    # args.probe_ffp_steps = 4
-    # args.n_epoch_adapat = 2
-    
-    # Group 6: PAP + SBM + TCSM (low correlation)
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = True
-    # args.probe_sbm_tcsm_enable = True
-    # args.probe_sbm_rho = 0.2
-    # args.probe_sbm_init = 0.5
-    # args.probe_ffp_steps = 3
-    # args.n_epoch_adapat = 1
-
-    # Group 7: PAP + SBM + TCSM (mid correlation, high init bias)
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = True
-    # args.probe_sbm_tcsm_enable = True
-    # args.probe_sbm_rho = 0.7
-    # args.probe_sbm_init = 0.8
-    # args.probe_ffp_steps = 3
-    # args.n_epoch_adapat = 1
-
-    # Group 8: Based on Group 5 
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = True
-    # args.probe_sbm_tcsm_enable = True
-    # args.probe_sbm_rho = 0.6
-    # args.probe_sbm_init = 0.6
-    # args.probe_ffp_steps = 4
-    # args.n_epoch_adapat = 2
-
-    # Group 9: Based on Group 5 
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = True
-    # args.probe_sbm_tcsm_enable = True
-    # args.probe_sbm_rho = 0.3
-    # args.probe_sbm_init = 0.6
-    # args.probe_ffp_steps = 4
-    # args.n_epoch_adapat = 2
-
-    # Group 10: Based on Group 9
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = True
-    # args.probe_sbm_tcsm_enable = True
-    # args.probe_sbm_rho = 0.6
-    # args.probe_sbm_init = 0.3
-    # args.probe_ffp_steps = 4
-    # args.n_epoch_adapat = 2
-
-    # Group 11: Based on Group 9
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = True
-    # args.probe_sbm_tcsm_enable = True
-    # args.probe_sbm_rho = 0.6
-    # args.probe_sbm_init = 0.9
-    # args.probe_ffp_steps = 4
-    # args.n_epoch_adapat = 2
-
-    # Group 12: Based on Group 10
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = True
-    # args.probe_sbm_tcsm_enable = True
-    # args.probe_sbm_rho = 0.3
-    # args.probe_sbm_init = 0.3
-    # args.probe_ffp_steps = 4
-    # args.n_epoch_adapat = 2
-
-    # Group 13: Based on Group 10
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = True
-    # args.probe_sbm_tcsm_enable = True
-    # args.probe_sbm_rho = 0.9
-    # args.probe_sbm_init = 0.3
-    # args.probe_ffp_steps = 4
-    # args.n_epoch_adapat = 2
-
-    # Group 14: Based on Group 13
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = True
-    # args.probe_sbm_tcsm_enable = True
-    # args.probe_sbm_rho = 0.9
-    # args.probe_sbm_init = 0.3
-    # args.probe_ffp_steps = 2
-    # args.n_epoch_adapat = 2
-
-    # Group 15: Based on Group 13
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = True
-    # args.probe_sbm_tcsm_enable = True
-    # args.probe_sbm_rho = 0.9
-    # args.probe_sbm_init = 0.3
     # args.probe_ffp_steps = 1
     # args.n_epoch_adapat = 2
 
-    # Group 16: Based on Group 13
+    # #Group ViTTA + PAP + TCSM
     # args.probe_ffp_enable = True
     # args.probe_cg_bnmm_enable = True
     # args.probe_sbm_tcsm_enable = True
     # args.probe_sbm_rho = 0.9
     # args.probe_sbm_init = 0.3
     # args.probe_ffp_steps = 4
-    # args.n_epoch_adapat = 1
-
-    # Group 17: Based on Group 13
-    args.probe_ffp_enable = True
-    args.probe_cg_bnmm_enable = True
-    args.probe_sbm_tcsm_enable = True
-    args.probe_sbm_rho = 0.9
-    args.probe_sbm_init = 0.3
-    args.probe_ffp_steps = 4
-    args.n_epoch_adapat = 3
+    # args.n_epoch_adapat = 2
 
     # ============================================================================================
 
@@ -331,21 +193,31 @@ if __name__ == '__main__':
     else:
         # Source-only evaluation parameters
         args.evaluate_baselines = True
-        args.baseline = 'source'
+        args.baseline = 'dua' # baseline, shot, tent, dua
         args.result_suffix=f'tta={args.tta}_evalbaseline={args.evaluate_baselines}_baseline={args.baseline}'
 
     # Set up corruption types to evaluate
     # corruptions = ['random_mini', 'gauss_mini']
-    corruptions = ['gauss_mini', 'pepper_mini', 'salt_mini','shot_mini',
-                'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
-                'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
-                'random_mini'  
-                ]
-    # corruptions = ['gauss', 'pepper', 'salt','shot',
-    #             'zoom', 'impulse', 'defocus', 'motion',
-    #             'jpeg', 'contrast', 'rain', 'h265_abr',
-    #             'random'  
+    # corruptions = ['gauss_mini', 'pepper_mini', 'salt_mini','shot_mini',
+    #             'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
+    #             'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
+    #             'random_mini'  
     #             ]
+    corruptions = [
+        'gauss', 
+        'pepper', 
+        'salt',
+        'shot',
+        'zoom', 
+        'impulse', 
+        'defocus', 
+        'motion',
+        'jpeg', 
+        'contrast', 
+        'rain', 
+        'h265_abr',
+        'random'  
+                ]
     
     # Set up result directory based on evaluation mode
     if args.tta:

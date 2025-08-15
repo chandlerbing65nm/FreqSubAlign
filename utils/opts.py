@@ -74,7 +74,7 @@ parser.add_argument('--debug', action='store_true',
                     help='if debug, loading only the first 50 videos in the list')
 parser.add_argument('--verbose', type=bool, default=True,
                     help='more details in the logging file')
-parser.add_argument('--print-freq', '-p', default=20, type=int,
+parser.add_argument('--print-freq', '-p', default=1, type=int,
                     help='print frequency (default: 5)')
 
 # ========================= Test-Time Adaptation Configuration ==========================

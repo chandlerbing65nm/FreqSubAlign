@@ -118,10 +118,23 @@ def validate(val_loader, model, criterion, iter, epoch=None, args=None, logger=N
             logger.debug(f'Starting ---- {args.corruptions} ---- evaluation for Source...')
         elif args.baseline == 'tent':
             from baselines.tent import forward_and_adapt
+            from utils.pap_tcsm import run_pap_warmup
             logger.debug(f'Starting ---- {args.corruptions} ---- adaptation for TENT...')
+            did_pap = False
             for i, (input, target) in enumerate(val_loader):
                 actual_bz = input.shape[0]
                 input = input.to(device)
+                # Optional PAP/TCSM warmup on first batch only
+                if (not did_pap) and getattr(args, 'probe_ffp_enable', False):
+                    x_probe = input
+                    if args.arch == 'tanet':
+                        x_probe = x_probe.view(-1, 3, x_probe.size(2), x_probe.size(3))
+                        x_probe = x_probe.view(actual_bz * args.test_crops * n_clips,
+                                               args.clip_length, 3, x_probe.size(2), x_probe.size(3))
+                    else:
+                        x_probe = x_probe.reshape((-1,) + x_probe.shape[2:])
+                    _ = run_pap_warmup(model, x_probe, args, logger)
+                    did_pap = True
                 if args.arch == 'tanet':
                     input = input.view(-1, 3, input.size(2), input.size(3))
                     input = input.view(actual_bz * args.test_crops * n_clips,
