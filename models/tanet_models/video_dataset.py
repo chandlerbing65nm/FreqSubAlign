@@ -9,6 +9,9 @@ from numpy.random import randint
 import os.path as osp
 import decord
 
+# Import phase-only preprocessing utility
+from utils.frequency_utils import apply_phase_only_preprocessing, apply_dwt_preprocessing
+
 class VideoRecord(object):
     def __init__(self, row):
         self._data = row
@@ -47,6 +50,7 @@ class Video_TANetDataSet(data.Dataset):
                  tta_view_sample_style_list = None,
                  n_tta_aug_views = None,
                  debug = False, debug_vid = 50,
+                 args = None
                  ):
 
         # self.root_path = root_path
@@ -70,6 +74,7 @@ class Video_TANetDataSet(data.Dataset):
         self.if_sample_tta_aug_views = if_sample_tta_aug_views
         self.tta_view_sample_style_list = tta_view_sample_style_list
         self.n_tta_aug_views = n_tta_aug_views
+        self.args = args
 
         if self.dense_sample:
             print('=> Using dense sample for the dataset...')  #  todo  frames are sampled from 64 consecutive frames in the video
@@ -338,6 +343,16 @@ class Video_TANetDataSet(data.Dataset):
         #   because after horizontal flip,  "left to right" becomes "right to left"
 
         process_data, label = self.transform((images, record.label))
+        
+        # Apply phase-only preprocessing if enabled
+        if hasattr(self, 'args') and getattr(self.args, 'phase_only_preprocessing', False):
+            process_data = apply_phase_only_preprocessing(process_data)
+        
+        # Apply DWT preprocessing if enabled
+        if hasattr(self, 'args') and getattr(self.args, 'dwt_preprocessing', False):
+            component = getattr(self.args, 'dwt_component', 'approx')
+            process_data = apply_dwt_preprocessing(process_data, component=component)
+        
         return process_data, label
 
     def get_img_file_deprecated(self, record, indices):

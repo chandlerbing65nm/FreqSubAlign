@@ -257,7 +257,8 @@ def get_dataset_tanet(args, split='train', dataset_type=None):
             debug=args.debug,
             if_sample_tta_aug_views=if_sample_tta_aug_views,
             tta_view_sample_style_list=tta_view_sample_style_list,
-            n_tta_aug_views=n_augmented_views
+            n_tta_aug_views=n_augmented_views,
+            args=args
         )
 
 
@@ -348,4 +349,5 @@ def get_dataset_videoswin(args, split = 'train', dataset_type = None):
                  debug = args.debug,
                 if_sample_tta_aug_views= if_sample_tta_aug_views,
                 tta_view_sample_style_list=tta_view_sample_style_list,
-                n_augmented_views=args.n_augmented_views )
+                n_augmented_views=args.n_augmented_views,
+                args=args )

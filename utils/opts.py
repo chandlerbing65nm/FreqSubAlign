@@ -80,6 +80,12 @@ parser.add_argument('--print-freq', '-p', default=1, type=int,
 # ========================= Test-Time Adaptation Configuration ==========================
 parser.add_argument('--tta', type=bool, default=True,
                     help='perform test-time adaptation')
+parser.add_argument('--phase_only_preprocessing', type=bool, default=False,
+                    help='apply Fourier transform to retain only phase information')
+parser.add_argument('--dwt_preprocessing', type=bool, default=False,
+                    help='apply Discrete Wavelet Transform preprocessing')
+parser.add_argument('--dwt_component', type=str, default='LL',
+                    help='DWT component(s) to use for reconstruction (LL, LH, HL, HH or combinations like LL+LH)')
 parser.add_argument('--use_src_stat_in_reg', type=bool, default=True,
                     help='whether to use source statistics in the regularization loss')
 parser.add_argument('--fix_BNS', type=bool, default=True,

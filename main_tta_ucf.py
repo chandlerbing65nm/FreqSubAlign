@@ -113,7 +113,7 @@ if __name__ == '__main__':
     dataset_dir = dataset_to_dir.get(args.dataset, args.dataset)
 
     # Choose evaluation mode (TTA or source-only)
-    args.tta = False  # Set to False for source-only evaluation
+    args.tta = True  # Set to False for source-only evaluation
     
     # Get model configuration based on architecture and dataset
     model_config = get_model_config(args.arch, args.dataset, tta_mode=args.tta)
@@ -142,29 +142,21 @@ if __name__ == '__main__':
     args.if_sample_tta_aug_views = True
     args.batch_size = 1  # Default to 1 for TTA, can be overridden
 
-    
     # ========================= Ablation Presets (uncomment ONE group) ==========================
+    args.dwt_preprocessing = True
+    args.dwt_component = 'LL'
 
     # #Group ViTTA
-    # args.probe_ffp_enable = False
-    # args.probe_cg_bnmm_enable = False
-    # args.probe_sbm_tcsm_enable = False
-    # args.n_epoch_adapat = 1
+    args.probe_ffp_enable = False
+    args.probe_cg_bnmm_enable = False
+    args.probe_sbm_tcsm_enable = False
+    args.n_epoch_adapat = 1
 
     # # Group ViTTA + PAP
     # args.probe_ffp_enable = True
     # args.probe_cg_bnmm_enable = False
     # args.probe_sbm_tcsm_enable = False
     # args.probe_ffp_steps = 1
-    # args.n_epoch_adapat = 2
-
-    # #Group ViTTA + PAP + TCSM
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = True
-    # args.probe_sbm_tcsm_enable = True
-    # args.probe_sbm_rho = 0.9
-    # args.probe_sbm_init = 0.3
-    # args.probe_ffp_steps = 4
     # args.n_epoch_adapat = 2
 
     # ============================================================================================
@@ -188,6 +180,12 @@ if __name__ == '__main__':
                 suffix += f"_sbm=1"
                 if getattr(args, 'probe_sbm_tcsm_enable', False):
                     suffix += f"_tcsm=1_rho={args.probe_sbm_rho}"
+
+        # Append preprocessing settings
+        if getattr(args, 'phase_only_preprocessing', False):
+            suffix += f"_phaseonly"
+        if getattr(args, 'dwt_preprocessing', False):
+            suffix += f"_dwt{args.dwt_component}"
 
         args.result_suffix = suffix
     else:

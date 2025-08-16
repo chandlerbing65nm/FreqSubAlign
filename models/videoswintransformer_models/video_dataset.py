@@ -5,6 +5,10 @@ import torch.utils.data as data
 from models.videoswintransformer_models.transforms_backup import DecordInit, SampleFrames, DecordDecode, Resize, CenterCrop, Flip, Normalize, FormatShape, Collect, ToTensor, \
     RandomResizedCrop
 # import decord
+
+# Import phase-only preprocessing utility
+from utils.frequency_utils import apply_phase_only_preprocessing, apply_dwt_preprocessing
+
 class Video_SwinDataset(data.Dataset):
     def __init__(self, list_file,
                  num_segments=3,  # clip_length
@@ -24,6 +28,7 @@ class Video_SwinDataset(data.Dataset):
                  tta_view_sample_style_list=None,
                  n_augmented_views = None,
                  debug = False, debug_vid = 50,
+                 args = None
                  ):
         self.list_file = list_file
         self.num_segments = num_segments
@@ -46,6 +51,7 @@ class Video_SwinDataset(data.Dataset):
         self.if_sample_tta_aug_views = if_sample_tta_aug_views
         self.tta_view_sample_style_list = tta_view_sample_style_list
         self.n_augmented_views = n_augmented_views
+        self.args = args
         self.__parse_list()
     def __parse_list(self):
         tmp = [x.strip().split(' ') for x in open(self.list_file)]
@@ -104,6 +110,16 @@ class Video_SwinDataset(data.Dataset):
             raise NotImplementedError('Transformation for training not implemented ')
         for func_ in func_list:
             results = func_(results)
+        
+        # Apply phase-only preprocessing if enabled
+        if hasattr(self, 'args') and getattr(self.args, 'phase_only_preprocessing', False):
+            results['imgs'] = apply_phase_only_preprocessing(results['imgs'])
+        
+        # Apply DWT preprocessing if enabled
+        if hasattr(self, 'args') and getattr(self.args, 'dwt_preprocessing', False):
+            component = getattr(self.args, 'dwt_component', 'approx')
+            results['imgs'] = apply_dwt_preprocessing(results['imgs'], component=component)
+        
         return results['imgs'], record.label
     def __len__(self):
         return len(self.video_list)
