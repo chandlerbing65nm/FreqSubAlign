@@ -140,24 +140,14 @@ if __name__ == '__main__':
 
     args.n_augmented_views = 2
     args.if_sample_tta_aug_views = True
-    args.batch_size = 1  # Default to 1 for TTA, can be overridden
-
-    # ========================= Ablation Presets (uncomment ONE group) ==========================
-    args.dwt_preprocessing = True
-    args.dwt_component = 'LL'
-
-    # #Group ViTTA
-    args.probe_ffp_enable = False
-    args.probe_cg_bnmm_enable = False
-    args.probe_sbm_tcsm_enable = False
+    args.batch_size = 1
     args.n_epoch_adapat = 1
 
-    # # Group ViTTA + PAP
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = False
-    # args.probe_sbm_tcsm_enable = False
-    # args.probe_ffp_steps = 1
-    # args.n_epoch_adapat = 2
+    # ========================= New Arguments ==========================
+    args.corruption_list = 'full'
+    args.dwt_preprocessing = True
+    args.dwt_component = 'LL+LH+HL'
+    args.dwt_levels = 3
 
     # ============================================================================================
 
@@ -167,25 +157,15 @@ if __name__ == '__main__':
         args.spatiotemp_var_clean_file = model_config['spatiotemp_var_clean_file']
         print(f"Multi-epoch TTA enabled: Using {args.n_epoch_adapat} adaptation epochs")
 
-        args.include_ce_in_consistency = False
-        suffix = f"celoss={args.include_ce_in_consistency}_adaptepoch={args.n_epoch_adapat}"
-
+        suffix = f"adaptepoch={args.n_epoch_adapat}"
         suffix += f"_views{args.n_augmented_views}_bs{args.batch_size}"
-        # Append PAP probe settings
-        suffix += f"_ffp={int(bool(getattr(args, 'probe_ffp_enable', False)))}"
-        if getattr(args, 'probe_ffp_enable', False):
-            suffix += f"_ffpSteps={args.probe_ffp_steps}_ffpAmp={int(bool(args.probe_amp))}_ffpBackoff={args.probe_max_backoff}_ffpConf={args.probe_conf_thresh}"
-            # Append SBM/TCSM flags if enabled
-            if getattr(args, 'probe_cg_bnmm_enable', False):
-                suffix += f"_sbm=1"
-                if getattr(args, 'probe_sbm_tcsm_enable', False):
-                    suffix += f"_tcsm=1_rho={args.probe_sbm_rho}"
 
         # Append preprocessing settings
-        if getattr(args, 'phase_only_preprocessing', False):
-            suffix += f"_phaseonly"
         if getattr(args, 'dwt_preprocessing', False):
-            suffix += f"_dwt{args.dwt_component}"
+            dwt_levels = getattr(args, 'dwt_levels', 1)
+            suffix += f"_dwt{args.dwt_component}-L{dwt_levels}"
+            
+        suffix += f"_corruption={args.corruption_list}"
 
         args.result_suffix = suffix
     else:
@@ -195,27 +175,18 @@ if __name__ == '__main__':
         args.result_suffix=f'tta={args.tta}_evalbaseline={args.evaluate_baselines}_baseline={args.baseline}'
 
     # Set up corruption types to evaluate
-    # corruptions = ['random_mini', 'gauss_mini']
-    # corruptions = ['gauss_mini', 'pepper_mini', 'salt_mini','shot_mini',
-    #             'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
-    #             'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
-    #             'random_mini'  
-    #             ]
-    corruptions = [
-        'gauss', 
-        'pepper', 
-        'salt',
-        'shot',
-        'zoom', 
-        'impulse', 
-        'defocus', 
-        'motion',
-        'jpeg', 
-        'contrast', 
-        'rain', 
-        'h265_abr',
-        'random'  
-                ]
+    if getattr(args, 'corruption_list', 'full') == 'mini':
+        corruptions = [
+            'gauss_mini', 'pepper_mini', 'salt_mini','shot_mini',
+            'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
+            'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
+        ]
+    else:
+        corruptions = [
+            'gauss', 'pepper', 'salt', 'shot',
+            'zoom', 'impulse', 'defocus', 'motion',
+            'jpeg', 'contrast', 'rain', 'h265_abr',
+        ]
     
     # Set up result directory based on evaluation mode
     if args.tta:

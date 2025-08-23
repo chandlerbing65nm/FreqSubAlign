@@ -344,14 +344,14 @@ class Video_TANetDataSet(data.Dataset):
 
         process_data, label = self.transform((images, record.label))
         
-        # Apply phase-only preprocessing if enabled
-        if hasattr(self, 'args') and getattr(self.args, 'phase_only_preprocessing', False):
-            process_data = apply_phase_only_preprocessing(process_data)
+        # # Apply phase-only preprocessing if enabled
+        # if hasattr(self, 'args') and getattr(self.args, 'phase_only_preprocessing', False):
+        #     process_data = apply_phase_only_preprocessing(process_data)
         
         # Apply DWT preprocessing if enabled
         if hasattr(self, 'args') and getattr(self.args, 'dwt_preprocessing', False):
             component = getattr(self.args, 'dwt_component', 'approx')
-            process_data = apply_dwt_preprocessing(process_data, component=component)
+            process_data = apply_dwt_preprocessing(process_data, component=component, levels=self.args.dwt_levels)
         
         return process_data, label
 

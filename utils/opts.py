@@ -26,6 +26,9 @@ parser.add_argument('--video_data_dir', type=str,
 parser.add_argument('--vid_format', default='', type=str,
                     help='video format if not specified in filenames')
 parser.add_argument('--datatype', default='vid', type=str, choices=['vid', 'frame'])
+# Choose corruption list size
+parser.add_argument('--corruption_list', type=str, default='full', choices=['mini', 'full'],
+                    help='Which corruption list to evaluate: mini (quick sanity) or full (complete set)')
 
 # ========================= Statistics Files ==========================
 parser.add_argument('--spatiotemp_mean_clean_file', type=str,
@@ -86,6 +89,8 @@ parser.add_argument('--dwt_preprocessing', type=bool, default=False,
                     help='apply Discrete Wavelet Transform preprocessing')
 parser.add_argument('--dwt_component', type=str, default='LL',
                     help='DWT component(s) to use for reconstruction (LL, LH, HL, HH or combinations like LL+LH)')
+parser.add_argument('--dwt_levels', type=int, default=1,
+                    help='Number of DWT decomposition levels (K>=1). Components are selected at the deepest level.')
 parser.add_argument('--use_src_stat_in_reg', type=bool, default=True,
                     help='whether to use source statistics in the regularization loss')
 parser.add_argument('--fix_BNS', type=bool, default=True,
@@ -107,7 +112,7 @@ parser.add_argument('--if_spatial_rand_cropping', type=bool, default=True)
 parser.add_argument('--if_pred_consistency', type=bool, default=True)
 parser.add_argument('--lambda_pred_consis', type=float, default=0.1)
 parser.add_argument('--lambda_feature_reg', type=int, default=1)
-parser.add_argument('--include_ce_in_consistency', type=bool, default=True,
+parser.add_argument('--include_ce_in_consistency', type=bool, default=False,
                     help='Whether to include cross-entropy loss when using prediction consistency')
 parser.add_argument('--n_augmented_views', type=int, default=2)
 parser.add_argument('--tta_view_sample_style_list', default=['uniform_equidist'])
@@ -133,7 +138,7 @@ parser.add_argument('--n_gradient_steps', type=int, default=1,
                     help='number of gradient steps per sample')
 
 # ========================= Pre-Adaptation Probing (PAP) ==========================
-parser.add_argument('--probe_ffp_enable', type=bool, default=True,
+parser.add_argument('--probe_ffp_enable', type=bool, default=False,
                     help='Enable Fail-Forward Probing: forward-only warmup before adaptation to initialize runtime states (BN/AMP/autotune)')
 parser.add_argument('--probe_ffp_steps', type=int, default=1,
                     help='Number of forward-only probe passes before adaptation (each pass is eval->train gated)')

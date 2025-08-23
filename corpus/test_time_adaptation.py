@@ -111,6 +111,8 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
     losses_consis = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
+    # Predictive entropy and DWT energy meters
+    entropy_meter = AverageMeter()
     pred_concat = []
     gt_concat = []
     end = time.time()
@@ -472,6 +474,16 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                 if if_pred_consistency:
                     losses_consis.update(loss_consis.item(), actual_bz)
 
+            # Predictive entropy (per batch over last step output)
+            with torch.no_grad():
+                try:
+                    probs = F.softmax(output, dim=1)
+                    entropy = (-probs * torch.log(probs + 1e-8)).sum(dim=1).mean().item()
+                    entropy_meter.update(entropy, actual_bz)
+                except Exception as e:
+                    if logger is not None:
+                        logger.warning(f"Predictive entropy computation failed: {e}")
+
             # todo ############################################################
             # todo ##################################### remove all the hooks, no computation of statistics during inference
             # todo ############################################################
@@ -534,14 +546,15 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                 assert hook_layer_counter == len(stat_reg_hooks)
 
             if args.verbose:
-                logger.debug(('TTA Epoch{epoch}: [{0}/{1}]\t'
-                              'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                              'Loss reg {loss_reg.val:.4f} ({loss_reg.avg:.4f})\t'
-                              'Loss consis {loss_consis.val:.4f} ({loss_consis.avg:.4f})\t'
-                              'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                              'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+                base_msg = ('TTA Epoch{epoch}: [{0}/{1}]\t'
+                            'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                            'Loss reg {loss_reg.val:.4f} ({loss_reg.avg:.4f})\t'
+                            'Loss consis {loss_consis.val:.4f} ({loss_consis.avg:.4f})\t'
+                            'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
+                            'Prec@5 {top5.val:.3f} ({top5.avg:.3f})').format(
                     batch_id, len(tta_loader), epoch=epoch_id+1, batch_time=batch_time, loss_reg=losses_reg, loss_consis=losses_consis,
-                    top1=top1, top5=top5)))
+                    top1=top1, top5=top5)
+                logger.debug(base_msg)
 
     epoch_result_list.append(top1.avg)
     

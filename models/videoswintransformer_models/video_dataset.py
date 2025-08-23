@@ -111,14 +111,14 @@ class Video_SwinDataset(data.Dataset):
         for func_ in func_list:
             results = func_(results)
         
-        # Apply phase-only preprocessing if enabled
-        if hasattr(self, 'args') and getattr(self.args, 'phase_only_preprocessing', False):
-            results['imgs'] = apply_phase_only_preprocessing(results['imgs'])
+        # # Apply phase-only preprocessing if enabled
+        # if hasattr(self, 'args') and getattr(self.args, 'phase_only_preprocessing', False):
+        #     results['imgs'] = apply_phase_only_preprocessing(results['imgs'])
         
-        # Apply DWT preprocessing if enabled
-        if hasattr(self, 'args') and getattr(self.args, 'dwt_preprocessing', False):
-            component = getattr(self.args, 'dwt_component', 'approx')
-            results['imgs'] = apply_dwt_preprocessing(results['imgs'], component=component)
+        # # Apply DWT preprocessing if enabled
+        # if hasattr(self, 'args') and getattr(self.args, 'dwt_preprocessing', False):
+        #     component = getattr(self.args, 'dwt_component', 'approx')
+        #     results['imgs'] = apply_dwt_preprocessing(results['imgs'], component=component)
         
         return results['imgs'], record.label
     def __len__(self):
