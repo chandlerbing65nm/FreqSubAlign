@@ -163,6 +163,22 @@ def eval(args=None, model = None ):
                                 args=args, logger=logger, optimizer = optimizer)
             epoch_result_list = [top1_acc]
 
+        elif args.baseline == 'rem':
+            if args.arch == 'tanet':
+                val_loader = torch.utils.data.DataLoader(
+                    get_dataset_tanet(args,  split='val'),
+                    batch_size=args.batch_size, shuffle=False,
+                    num_workers=args.workers, pin_memory=True, )
+            else:
+                val_loader = torch.utils.data.DataLoader(
+                    get_dataset(args, split='val'),
+                    batch_size=args.batch_size, shuffle=False,
+                    num_workers=args.workers, pin_memory=True)
+            model_baseline, optimizer = setup_model(args, base_model=model, logger=logger)
+            top1_acc = validate(val_loader, model_baseline, criterion, 0, epoch=0,
+                                args=args, logger=logger, optimizer=optimizer)
+            epoch_result_list = [top1_acc]
+
         elif args.baseline == 'shot':
             if args.arch == 'tanet':
                 val_loader = torch.utils.data.DataLoader(

@@ -117,33 +117,79 @@ def validate(val_loader, model, criterion, iter, epoch=None, args=None, logger=N
         if args.baseline == 'source':
             logger.debug(f'Starting ---- {args.corruptions} ---- evaluation for Source...')
         elif args.baseline == 'tent':
-            from baselines.tent import forward_and_adapt
-            from utils.pap_tcsm import run_pap_warmup
+            from baselines.tent import forward_and_adapt, softmax_entropy
             logger.debug(f'Starting ---- {args.corruptions} ---- adaptation for TENT...')
-            did_pap = False
             for i, (input, target) in enumerate(val_loader):
                 actual_bz = input.shape[0]
                 input = input.to(device)
-                # Optional PAP/TCSM warmup on first batch only
-                if (not did_pap) and getattr(args, 'probe_ffp_enable', False):
-                    x_probe = input
-                    if args.arch == 'tanet':
-                        x_probe = x_probe.view(-1, 3, x_probe.size(2), x_probe.size(3))
-                        x_probe = x_probe.view(actual_bz * args.test_crops * n_clips,
-                                               args.clip_length, 3, x_probe.size(2), x_probe.size(3))
-                    else:
-                        x_probe = x_probe.reshape((-1,) + x_probe.shape[2:])
-                    _ = run_pap_warmup(model, x_probe, args, logger)
-                    did_pap = True
+                target = target.to(device)
                 if args.arch == 'tanet':
                     input = input.view(-1, 3, input.size(2), input.size(3))
                     input = input.view(actual_bz * args.test_crops * n_clips,
                                        args.clip_length, 3, input.size(2), input.size(3))
-                    _ = forward_and_adapt(input, model, optimizer, args, actual_bz, n_clips)
+                    outputs = forward_and_adapt(input, model, optimizer, args, actual_bz, n_clips)
+                    # Per-batch loss (entropy) and accuracy at video level
+                    loss_val = float(softmax_entropy(outputs).mean().item())
+                    prec1, prec5 = accuracy(outputs.data, target, topk=(1, 5))
+                    logger.debug(f"[TENT][{i+1}/{len(val_loader)}] batch_loss={loss_val:.4f} top1={prec1.item():.3f} top5={prec5.item():.3f}")
                 else:
+                    # e.g., Video Swin Transformer: adapt on flattened views, report per-video accuracy
+                    n_views = args.test_crops * n_clips
                     input = input.reshape((-1,) + input.shape[2:])
-                    _ = forward_and_adapt(input, model, optimizer)
+                    outputs = forward_and_adapt(input, model, optimizer)
+                    # Extract logits if model returns tuple/dict
+                    logits = outputs
+                    if isinstance(logits, (tuple, list)):
+                        logits = logits[0]
+                    elif isinstance(logits, dict):
+                        logits = logits.get('logits', next(iter(logits.values())))
+                    # Compute entropy on the adapted outputs (as used for optimization)
+                    loss_val = float(softmax_entropy(logits).mean().item())
+                    # Aggregate views to per-video logits for accuracy reporting
+                    try:
+                        outputs_vid = logits.view(actual_bz, n_views, -1).mean(1)
+                        prec1, prec5 = accuracy(outputs_vid.data, target, topk=(1, 5))
+                        logger.debug(f"[TENT][{i+1}/{len(val_loader)}] batch_loss={loss_val:.4f} top1={prec1.item():.3f} top5={prec5.item():.3f}")
+                    except Exception:
+                        # Fallback: per-view accuracy if reshape fails
+                        target_flat = target.view(-1, 1).repeat(1, n_views).view(-1)
+                        prec1, prec5 = accuracy(logits.data, target_flat, topk=(1, 5))
+                        logger.debug(f"[TENT][{i+1}/{len(val_loader)}] batch_loss={loss_val:.4f} top1(view)={prec1.item():.3f} top5(view)={prec5.item():.3f}")
             logger.debug(f'TENT Adaptation Finished --- Now Evaluating')
+        elif args.baseline == 'rem':
+            from baselines.rem import forward_and_adapt as rem_forward_and_adapt
+            from baselines.tent import softmax_entropy  # kept for potential debugging
+            logger.debug(f'Starting ---- {args.corruptions} ---- adaptation for REM...')
+            for i, (input, target) in enumerate(val_loader):
+                actual_bz = input.shape[0]
+                input = input.to(device)
+                target = target.to(device)
+                if args.arch == 'tanet':
+                    input = input.view(-1, 3, input.size(2), input.size(3))
+                    input = input.view(actual_bz * args.test_crops * n_clips,
+                                       args.clip_length, 3, input.size(2), input.size(3))
+                    outputs, loss_val, mcl_val, erl_val = rem_forward_and_adapt(input, model, optimizer, args, actual_bz, n_clips)
+                    prec1, prec5 = accuracy(outputs.data, target, topk=(1, 5))
+                    logger.debug(f"[REM][{i+1}/{len(val_loader)}] total={loss_val:.4f} mcl={mcl_val:.4f} erl={erl_val:.4f} top1={prec1.item():.3f} top5={prec5.item():.3f}")
+                else:
+                    # e.g., Video Swin Transformer: adapt on flattened views, report per-video accuracy
+                    n_views = args.test_crops * n_clips
+                    input = input.reshape((-1,) + input.shape[2:])
+                    outputs, loss_val, mcl_val, erl_val = rem_forward_and_adapt(input, model, optimizer, args)
+                    logits = outputs
+                    if isinstance(logits, (tuple, list)):
+                        logits = logits[0]
+                    elif isinstance(logits, dict):
+                        logits = logits.get('logits', next(iter(logits.values())))
+                    try:
+                        outputs_vid = logits.view(actual_bz, n_views, -1).mean(1)
+                        prec1, prec5 = accuracy(outputs_vid.data, target, topk=(1, 5))
+                        logger.debug(f"[REM][{i+1}/{len(val_loader)}] total={loss_val:.4f} mcl={mcl_val:.4f} erl={erl_val:.4f} top1={prec1.item():.3f} top5={prec5.item():.3f}")
+                    except Exception:
+                        target_flat = target.view(-1, 1).repeat(1, n_views).view(-1)
+                        prec1, prec5 = accuracy(logits.data, target_flat, topk=(1, 5))
+                        logger.debug(f"[REM][{i+1}/{len(val_loader)}] total={loss_val:.4f} mcl={mcl_val:.4f} erl={erl_val:.4f} top1(view)={prec1.item():.3f} top5(view)={prec5.item():.3f}")
+            logger.debug(f'REM Adaptation Finished --- Now Evaluating')
         elif args.baseline == 'norm':
             logger.debug(f'Starting ---- {args.corruptions} ---- adaptation for NORM...')
             with torch.no_grad():

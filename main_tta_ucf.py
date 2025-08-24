@@ -113,7 +113,7 @@ if __name__ == '__main__':
     dataset_dir = dataset_to_dir.get(args.dataset, args.dataset)
 
     # Choose evaluation mode (TTA or source-only)
-    args.tta = True  # Set to False for source-only evaluation
+    args.tta = False  # Set to False for source-only evaluation
     
     # Get model configuration based on architecture and dataset
     model_config = get_model_config(args.arch, args.dataset, tta_mode=args.tta)
@@ -144,10 +144,10 @@ if __name__ == '__main__':
     args.n_epoch_adapat = 1
 
     # ========================= New Arguments ==========================
-    args.corruption_list = 'continual'
-    args.dwt_preprocessing = True
-    args.dwt_component = 'LL+LH+HL'
-    args.dwt_levels = 2
+    args.corruption_list = 'continual' # mini, full, continual
+    # args.dwt_preprocessing = True
+    # args.dwt_component = 'LL+LH+HL'
+    # args.dwt_levels = 2
 
     # args.update_only_bn_affine = True
 
@@ -160,23 +160,22 @@ if __name__ == '__main__':
         print(f"Multi-epoch TTA enabled: Using {args.n_epoch_adapat} adaptation epochs")
 
         suffix = f"adaptepoch={args.n_epoch_adapat}"
-        suffix += f"_views{args.n_augmented_views}_bs{args.batch_size}"
-
-        # Append preprocessing settings
-        if getattr(args, 'dwt_preprocessing', False):
-            dwt_levels = getattr(args, 'dwt_levels', 1)
-            suffix += f"_dwt{args.dwt_component}-L{dwt_levels}"
-        if getattr(args, 'update_only_bn_affine', False):
-            suffix += "_bnaffine"
-
-        suffix += f"_corruption={args.corruption_list}"
-
-        args.result_suffix = suffix
+        suffix += f"_views{args.n_augmented_views}"
     else:
         # Source-only evaluation parameters
         args.evaluate_baselines = True
-        args.baseline = 'tent' # baseline, shot, tent, dua
-        args.result_suffix=f'_baseline={args.baseline}'
+        args.baseline = 'rem' # baseline, shot, tent, dua, rem
+        
+        suffix = f'baseline={args.baseline}'
+
+    # Append preprocessing settings
+    if getattr(args, 'dwt_preprocessing', False):
+        suffix += f"_dwt{args.dwt_component}-L{args.dwt_levels}"
+    if getattr(args, 'update_only_bn_affine', False):
+        suffix += "_bnaffine"
+    suffix += f"_corruption={args.corruption_list}"
+    suffix += f"_bs{args.batch_size}"
+    args.result_suffix = suffix
 
     # Set up corruption types to evaluate
     if getattr(args, 'corruption_list', 'full') == 'mini':

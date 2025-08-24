@@ -1,5 +1,6 @@
 import torch.optim as optim
 import baselines.tent as tent
+import baselines.rem as rem
 import baselines.norm as norm
 from utils.opts import parser
 import baselines.shot as shot
@@ -34,6 +35,10 @@ def setup_model(args, base_model, logger):
         logger.info("test-time adaptation: TENT")
         model, optimizer = setup_tent(args, base_model, logger)
         return model, optimizer
+    elif args.baseline == "rem":
+        logger.info("test-time adaptation: REM")
+        model, optimizer = setup_rem(args, base_model, logger)
+        return model, optimizer
     elif args.baseline == "shot":
         optimizer, classfier, ext = setup_shot(args, base_model, logger)
         return optimizer, classfier, ext
@@ -42,6 +47,22 @@ def setup_model(args, base_model, logger):
         return model
     else:
         raise NotImplementedError('Baseline not implemented')
+
+
+def setup_rem(args, model, logger):
+    """Set up REM adaptation (BN-only updates with SGD at 1e-3).
+
+    Uses the same BN-only configuration and parameter collection as TENT,
+    but optimizer is SGD with the requested learning rate.
+    """
+    model = rem.configure_model(model)
+    params, param_names = rem.collect_params(model)
+    optimizer = optim.SGD(params, lr=1e-3)
+    if args.verbose:
+        logger.debug(f"model for adaptation: %s", model)
+        logger.debug(f"params for adaptation: %s", param_names)
+        logger.debug(f"optimizer for adaptation: %s", optimizer)
+    return model, optimizer
 
 
 def setup_source(args, model, logger):
