@@ -144,10 +144,12 @@ if __name__ == '__main__':
     args.n_epoch_adapat = 1
 
     # ========================= New Arguments ==========================
-    args.corruption_list = 'full'
+    args.corruption_list = 'continual'
     args.dwt_preprocessing = True
     args.dwt_component = 'LL+LH+HL'
-    args.dwt_levels = 3
+    args.dwt_levels = 2
+
+    # args.update_only_bn_affine = True
 
     # ============================================================================================
 
@@ -164,15 +166,17 @@ if __name__ == '__main__':
         if getattr(args, 'dwt_preprocessing', False):
             dwt_levels = getattr(args, 'dwt_levels', 1)
             suffix += f"_dwt{args.dwt_component}-L{dwt_levels}"
-            
+        if getattr(args, 'update_only_bn_affine', False):
+            suffix += "_bnaffine"
+
         suffix += f"_corruption={args.corruption_list}"
 
         args.result_suffix = suffix
     else:
         # Source-only evaluation parameters
         args.evaluate_baselines = True
-        args.baseline = 'dua' # baseline, shot, tent, dua
-        args.result_suffix=f'tta={args.tta}_evalbaseline={args.evaluate_baselines}_baseline={args.baseline}'
+        args.baseline = 'tent' # baseline, shot, tent, dua
+        args.result_suffix=f'_baseline={args.baseline}'
 
     # Set up corruption types to evaluate
     if getattr(args, 'corruption_list', 'full') == 'mini':
@@ -181,11 +185,15 @@ if __name__ == '__main__':
             'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
             'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
         ]
-    else:
+    elif getattr(args, 'corruption_list', 'full') == 'full':
         corruptions = [
             'gauss', 'pepper', 'salt', 'shot',
             'zoom', 'impulse', 'defocus', 'motion',
             'jpeg', 'contrast', 'rain', 'h265_abr',
+        ]
+    elif getattr(args, 'corruption_list', 'full') == 'continual':
+        corruptions = [
+            'continual',
         ]
     
     # Set up result directory based on evaluation mode
