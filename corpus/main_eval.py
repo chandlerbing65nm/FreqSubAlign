@@ -17,7 +17,7 @@ from corpus.training import train, validate, validate_brief
 from corpus.test_time_adaptation import tta_standard, evaluate_baselines
 from corpus.dataset_utils import get_dataset, get_dataset_tanet, get_dataset_videoswin, get_dataset_tanet_dua
 from corpus.model_utils import get_model
-from corpus.statistics_utils import compute_statistics, compute_cos_similarity, load_precomputed_statistics
+from corpus.statistics_utils import compute_statistics, compute_cos_similarity, load_precomputed_statistics, compute_dwt_subband_statistics
 
 import os.path as osp
 from tensorboardX import SummaryWriter
@@ -93,6 +93,9 @@ def eval(args=None, model = None ):
             epoch_result_list = None
         elif args.compute_stat == 'cossim':
             compute_cos_similarity(model, args=args, log_time=log_time)
+            epoch_result_list = None
+        elif args.compute_stat == 'dwt_subbands':
+            compute_dwt_subband_statistics(model, args=args, logger=logger, log_time=log_time)
             epoch_result_list = None
         elif args.compute_stat == False:
             if args.if_tta_standard:

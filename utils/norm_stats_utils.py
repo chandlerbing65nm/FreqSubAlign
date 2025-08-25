@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 from utils.utils_ import AverageMeter, AverageMeterTensor, MovingAverageTensor
 from config import device
@@ -98,6 +99,186 @@ class ComputeNormStatsHook():
         elif self.stat_type == 'spatial':
             self.batch_mean = output.mean((0, 3, 4))  # (N, C, T, H, W) ->  (C, T)
             self.batch_var = output.permute(1, 2, 0, 3, 4).contiguous().view([c, t, -1]).var(-1, unbiased=False)  # (N, C, T, H, W)  ->  (C, T, N, H, W ) -> (C, T )
+
+    def close(self):
+        self.hook.remove()
+
+class CombineNormStatsRegHook_DWT():
+    """
+    DWT subband statistics regularization hook.
+
+    - Registers a forward hook on a normalization layer
+    - On forward, converts features to N,C,T,H,W
+    - Applies L-level 2D Haar DWT on spatial dims per frame (T) and channel (C)
+    - Extracts deepest-level subbands (LL, LH, HL, HH)
+    - Computes per-channel mean/var for each subband over N,T, H', W'
+    - Computes weighted regularization loss vs. provided clean stats per subband
+    """
+    def __init__(
+        self,
+        module,
+        clip_len: int,
+        dwt_levels: int,
+        clean_stats_per_band: dict,
+        band_lambdas: dict,
+        reg_type: str = 'mse_loss',
+        moving_avg: bool = False,
+        momentum: float = 0.1,
+        before_norm: bool = False,
+        if_sample_tta_aug_views: bool = False,
+        n_augmented_views: int = 1,
+    ):
+        self.hook = module.register_forward_hook(self.hook_fn)
+        self.clip_len = clip_len
+        self.dwt_levels = max(1, int(dwt_levels))
+        self.reg_type = reg_type
+        self.moving_avg = moving_avg
+        self.momentum = momentum
+        self.before_norm = before_norm
+        self.if_sample_tta_aug_views = if_sample_tta_aug_views
+        self.n_augmented_views = n_augmented_views
+
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        # Expect keys: 'LL', 'LH', 'HL', 'HH' each with tuple(mean, var)
+        self.bands = ['LL', 'LH', 'HL', 'HH']
+        self.band_lambdas = {k: float(band_lambdas.get(k, 0.0)) for k in self.bands}
+
+        # Initialize running totals for total and per-band weighted regularization losses
+        self.r_feature = torch.tensor(0.0, device=self.device)
+        self.r_feature_bands = {b: torch.tensor(0.0, device=self.device) for b in self.bands}
+
+        self.source_mean = {}
+        self.source_var = {}
+        for b in self.bands:
+            pair = clean_stats_per_band.get(b, (None, None)) if clean_stats_per_band is not None else (None, None)
+            mu, var = pair
+            if mu is not None and var is not None:
+                self.source_mean[b] = torch.tensor(mu, device=self.device)
+                self.source_var[b] = torch.tensor(var, device=self.device)
+            else:
+                self.source_mean[b] = None
+                self.source_var[b] = None
+
+        # Set up meters
+        Meter = MovingAverageTensor if self.moving_avg else AverageMeterTensor
+        self.mean_m = {b: Meter(momentum=self.momentum) if self.moving_avg else Meter() for b in self.bands}
+        self.var_m = {b: Meter(momentum=self.momentum) if self.moving_avg else Meter() for b in self.bands}
+
+    @staticmethod
+    def _haar_kernels(device):
+        # 2x2 separable Haar filters (outer products). Normalize by 2 for energy preservation.
+        kLL = torch.tensor([[1., 1.], [1., 1.]], device=device) / 2.0
+        kLH = torch.tensor([[1., -1.], [1., -1.]], device=device) / 2.0
+        kHL = torch.tensor([[1., 1.], [-1., -1.]], device=device) / 2.0
+        kHH = torch.tensor([[1., -1.], [-1., 1.]], device=device) / 2.0
+        return kLL, kLH, kHL, kHH
+
+    @staticmethod
+    def _dwt2d_per_frame(x):
+        """
+        x: (N, C, H, W)
+        returns tuple of subbands each (N, C, H/2, W/2)
+        """
+        device = x.device
+        N, C, H, W = x.shape
+        kLL, kLH, kHL, kHH = CombineNormStatsRegHook_DWT._haar_kernels(device)
+        # Build group conv kernels of shape (4*C, 1, 2, 2) then use groups=C and repeat per channel
+        base = torch.stack([kLL, kLH, kHL, kHH], dim=0)  # (4, 2, 2)
+        weight = base.unsqueeze(1)  # (4,1,2,2)
+        weight = weight.repeat(C, 1, 1, 1)  # (4*C,1,2,2)
+        x_r = x.view(N, C, H, W)
+        y = F.conv2d(x_r, weight, bias=None, stride=2, padding=0, groups=C)  # (N, 4*C, H/2, W/2)
+        y = y.view(N, C, 4, y.shape[-2], y.shape[-1]).contiguous()  # (N, C, 4, H2, W2)
+        LL = y[:, :, 0]
+        LH = y[:, :, 1]
+        HL = y[:, :, 2]
+        HH = y[:, :, 3]
+        return LL, LH, HL, HH
+
+    @staticmethod
+    def _dwt2d_multi_level(x, levels: int):
+        """
+        x: (N, C, T, H, W)
+        returns deepest level subbands each (N, C, T, H/2^L, W/2^L)
+        """
+        N, C, T, H, W = x.shape
+        cur = x
+        LL = LH = HL = HH = None
+        for _ in range(levels):
+            # process per frame to avoid 3D conv; stack T into batch
+            cur_2d = cur.permute(0, 2, 1, 3, 4).contiguous().view(N * T, C, cur.shape[-2], cur.shape[-1])
+            LL, LH, HL, HH = CombineNormStatsRegHook_DWT._dwt2d_per_frame(cur_2d)
+            H2, W2 = LL.shape[-2], LL.shape[-1]
+            # reshape back to (N, C, T, H2, W2)
+            LL = LL.view(N, T, C, H2, W2).permute(0, 2, 1, 3, 4).contiguous()
+            LH = LH.view(N, T, C, H2, W2).permute(0, 2, 1, 3, 4).contiguous()
+            HL = HL.view(N, T, C, H2, W2).permute(0, 2, 1, 3, 4).contiguous()
+            HH = HH.view(N, T, C, H2, W2).permute(0, 2, 1, 3, 4).contiguous()
+            # iterate only LL for deeper level
+            cur = LL
+        return LL, LH, HL, HH
+
+    def hook_fn(self, module, input, output):
+        feature = input[0] if self.before_norm else output
+        # reset losses at each forward
+        self.r_feature = torch.tensor(0.0, device=self.device)
+        self.r_feature_bands = {b: torch.tensor(0.0, device=self.device) for b in self.bands}
+
+        # Reformat to N,C,T,H,W similarly to other hooks
+        if isinstance(module, nn.BatchNorm1d):
+            return  # DWT on 1D not supported; skip
+        elif isinstance(module, nn.BatchNorm2d):
+            nmt, c, h, w = feature.size()
+            t = self.clip_len
+            if self.if_sample_tta_aug_views:
+                m = self.n_augmented_views
+                bz = nmt // (m * t)
+                feat = feature.view(bz * m, t, c, h, w).permute(0, 2, 1, 3, 4).contiguous()
+            else:
+                bz = nmt // t
+                feat = feature.view(bz, t, c, h, w).permute(0, 2, 1, 3, 4).contiguous()
+        elif isinstance(module, nn.BatchNorm3d):
+            bz, c, t, h, w = feature.size()
+            feat = feature
+        elif isinstance(module, nn.LayerNorm):
+            # feature shape: (N, T, H, W, C)
+            assert len(feature.size()) == 5
+            bz, t, h, w, c = feature.size()
+            feat = feature.permute(0, 4, 1, 2, 3).contiguous()
+        else:
+            return
+
+        # Apply multi-level DWT
+        LL, LH, HL, HH = self._dwt2d_multi_level(feat, self.dwt_levels)
+
+        # Compute per-channel stats for each subband
+        subband_tensors = {'LL': LL, 'LH': LH, 'HL': HL, 'HH': HH}
+        for b in self.bands:
+            if self.source_mean[b] is None or self.source_var[b] is None:
+                continue
+            sb = subband_tensors[b]
+            # (N,C,T,H,W) -> per-channel mean/var over N,T,H,W
+            c = sb.shape[1]
+            mean_c = sb.mean(dim=(0, 2, 3, 4))  # (C,)
+            var_c = sb.permute(1, 0, 2, 3, 4).contiguous().view(c, -1).var(1, unbiased=False)
+            if self.moving_avg:
+                self.mean_m[b].update(mean_c)
+                self.var_m[b].update(var_c)
+            else:
+                self.mean_m[b].update(mean_c, n=sb.shape[0])
+                self.var_m[b].update(var_c, n=sb.shape[0])
+            lam = self.band_lambdas.get(b, 0.0)
+            if lam > 0:
+                reg_b = compute_regularization(
+                    self.source_mean[b], self.mean_m[b].avg, self.source_var[b], self.var_m[b].avg, self.reg_type
+                )
+                # accumulate weighted total and store per-band (weighted) contributions for logging
+                self.r_feature = self.r_feature + lam * reg_b
+                self.r_feature_bands[b] = lam * reg_b
+
+    def add_hook_back(self, module):
+        self.hook = module.register_forward_hook(self.hook_fn)
 
     def close(self):
         self.hook.remove()

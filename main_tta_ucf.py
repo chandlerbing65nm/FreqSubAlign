@@ -113,7 +113,7 @@ if __name__ == '__main__':
     dataset_dir = dataset_to_dir.get(args.dataset, args.dataset)
 
     # Choose evaluation mode (TTA or source-only)
-    args.tta = False  # Set to False for source-only evaluation
+    args.tta = True  # Set to False for source-only evaluation
     
     # Get model configuration based on architecture and dataset
     model_config = get_model_config(args.arch, args.dataset, tta_mode=args.tta)
@@ -144,12 +144,21 @@ if __name__ == '__main__':
     args.n_epoch_adapat = 1
 
     # ========================= New Arguments ==========================
-    args.corruption_list = 'continual' # mini, full, continual
+    args.corruption_list = 'full' # mini, full, continual, continual_mini
     # args.dwt_preprocessing = True
-    # args.dwt_component = 'LL+LH+HL'
-    # args.dwt_levels = 2
+    # args.dwt_component = 'LL'
+    # args.dwt_levels = 1
 
-    # args.update_only_bn_affine = True
+    # # DWT subband alignment hook
+    # args.dwt_align_enable = True
+    # args.dwt_align_levels = 1  # must match the NPZ (L1)
+    # args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt/dwt_subband_stats_L1_20250825_134144.npz'
+
+    # # Choose alignment weights (example: LL only)
+    # args.dwt_align_lambda_ll = 1.0
+    # args.dwt_align_lambda_lh = 1.0
+    # args.dwt_align_lambda_hl = 1.0
+    # args.dwt_align_lambda_hh = 1.0
 
     # ============================================================================================
 
@@ -168,9 +177,24 @@ if __name__ == '__main__':
         
         suffix = f'baseline={args.baseline}'
 
-    # Append preprocessing settings
+    # Append preprocessing and alignment settings
     if getattr(args, 'dwt_preprocessing', False):
         suffix += f"_dwt{args.dwt_component}-L{args.dwt_levels}"
+    # DWT subband alignment hook settings (for reproducibility)
+    if getattr(args, 'dwt_align_enable', False):
+        suffix += f"_dwtAlign-L{getattr(args, 'dwt_align_levels', 1)}"
+        # Compact lambda encoding: include only lambdas > 0 to keep suffix short
+        lam_ll = getattr(args, 'dwt_align_lambda_ll', 1.0)
+        lam_lh = getattr(args, 'dwt_align_lambda_lh', 1.0)
+        lam_hl = getattr(args, 'dwt_align_lambda_hl', 1.0)
+        lam_hh = getattr(args, 'dwt_align_lambda_hh', 1.0)
+        parts = []
+        if lam_ll > 0: parts.append(f"LL{lam_ll}")
+        if lam_lh > 0: parts.append(f"LH{lam_lh}")
+        if lam_hl > 0: parts.append(f"HL{lam_hl}")
+        if lam_hh > 0: parts.append(f"HH{lam_hh}")
+        if parts:
+            suffix += "_" + "+".join(parts)
     if getattr(args, 'update_only_bn_affine', False):
         suffix += "_bnaffine"
     suffix += f"_corruption={args.corruption_list}"
@@ -193,6 +217,10 @@ if __name__ == '__main__':
     elif getattr(args, 'corruption_list', 'full') == 'continual':
         corruptions = [
             'continual',
+        ]
+    elif getattr(args, 'corruption_list', 'full') == 'continual_mini':
+        corruptions = [
+            'continual_mini',
         ]
     
     # Set up result directory based on evaluation mode

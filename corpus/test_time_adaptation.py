@@ -63,7 +63,7 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
         assert args.n_gradient_steps == 1 # todo one gradient step per sample (on forward pass per sample )
         # Multi-epoch support: removed hard-coded n_epoch_adapat == 1 assertion
         logger.debug(f"TTA Online mode: Using {args.n_epoch_adapat} epochs for adaptation")
-    from utils.norm_stats_utils import CombineNormStatsRegHook_onereg
+    from utils.norm_stats_utils import CombineNormStatsRegHook_onereg, CombineNormStatsRegHook_DWT
     # from utils.relation_map_utils import CombineCossimRegHook
 
     # candidate_bn_layers = [nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d]
@@ -113,6 +113,12 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
     top5 = AverageMeter()
     # Predictive entropy and DWT energy meters
     entropy_meter = AverageMeter()
+    # Initialize DWT per-band meters (filled if DWT alignment is enabled)
+    dwt_align_enabled = getattr(args, 'dwt_align_enable', False)
+    dwt_band_meters = {b: AverageMeter() for b in ['LL', 'LH', 'HL', 'HH']} if dwt_align_enabled else {}
+    # Regularization breakdown meters
+    losses_reg_base = AverageMeter() if dwt_align_enabled else None
+    losses_reg_dwt = AverageMeter() if dwt_align_enabled else None
     pred_concat = []
     gt_concat = []
     end = time.time()
@@ -153,6 +159,61 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
             list_spatiotemp_mean_clean_new, list_spatiotemp_var_clean_new = list_spatiotemp_mean_clean, list_spatiotemp_var_clean
 
         assert len(list_spatiotemp_mean_clean_new) == len(chosen_layers)
+
+        # ========================= Load DWT subband stats if enabled ==========================
+        dwt_align_enabled = getattr(args, 'dwt_align_enable', False)
+        list_dwt_stats_clean_new = None
+        if dwt_align_enabled and getattr(args, 'dwt_stats_npz_file', ''):
+            try:
+                dwt_npz = np.load(args.dwt_stats_npz_file, allow_pickle=True)
+                have = set(dwt_npz.files)
+                def get_list_or_none(k):
+                    return list(dwt_npz[k]) if k in have else None
+
+                LL_mean_list, LL_var_list = get_list_or_none('LL_mean'), get_list_or_none('LL_var')
+                LH_mean_list, LH_var_list = get_list_or_none('LH_mean'), get_list_or_none('LH_var')
+                HL_mean_list, HL_var_list = get_list_or_none('HL_mean'), get_list_or_none('HL_var')
+                HH_mean_list, HH_var_list = get_list_or_none('HH_mean'), get_list_or_none('HH_var')
+
+                list_dwt_stats_clean_new = []
+                if args.arch == 'tanet':
+                    counter = 0
+                    for _, chosen_layer in chosen_layers:
+                        if isinstance(chosen_layer, nn.BatchNorm1d):
+                            list_dwt_stats_clean_new.append(None)
+                        elif isinstance(chosen_layer, (nn.BatchNorm2d, nn.BatchNorm3d)):
+                            band_dict = {}
+                            if LL_mean_list is not None and LL_var_list is not None:
+                                band_dict['LL'] = (LL_mean_list[counter], LL_var_list[counter])
+                            if LH_mean_list is not None and LH_var_list is not None:
+                                band_dict['LH'] = (LH_mean_list[counter], LH_var_list[counter])
+                            if HL_mean_list is not None and HL_var_list is not None:
+                                band_dict['HL'] = (HL_mean_list[counter], HL_var_list[counter])
+                            if HH_mean_list is not None and HH_var_list is not None:
+                                band_dict['HH'] = (HH_mean_list[counter], HH_var_list[counter])
+                            list_dwt_stats_clean_new.append(band_dict if len(band_dict) > 0 else None)
+                            counter += 1
+                elif args.arch == 'videoswintransformer':
+                    # one-to-one with chosen_layers
+                    L = len(chosen_layers)
+                    for i in range(L):
+                        band_dict = {}
+                        if LL_mean_list is not None and LL_var_list is not None:
+                            band_dict['LL'] = (LL_mean_list[i], LL_var_list[i])
+                        if LH_mean_list is not None and LH_var_list is not None:
+                            band_dict['LH'] = (LH_mean_list[i], LH_var_list[i])
+                        if HL_mean_list is not None and HL_var_list is not None:
+                            band_dict['HL'] = (HL_mean_list[i], HL_var_list[i])
+                        if HH_mean_list is not None and HH_var_list is not None:
+                            band_dict['HH'] = (HH_mean_list[i], HH_var_list[i])
+                        list_dwt_stats_clean_new.append(band_dict if len(band_dict) > 0 else None)
+                # sanity length
+                if list_dwt_stats_clean_new is not None and len(list_dwt_stats_clean_new) != len(chosen_layers):
+                    list_dwt_stats_clean_new = None
+            except Exception as e:
+                if logger is not None:
+                    logger.warning(f"Failed to load DWT stats from {args.dwt_stats_npz_file}: {e}")
+                list_dwt_stats_clean_new = None
 
     if not hasattr(args, 'moving_avg'):
         args.moving_avg = False
@@ -202,118 +263,6 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                     chosen_layers = choose_layers(model, candidate_layers)
                     chosen_layers = chosen_layers[1:]
 
-                # ========================= Pre-Adaptation Probing (PAP) ==========================
-                # Forward-only warmup to initialize runtime states (allocator, BN buffers, AMP/loss-scale) before adaptation
-                if getattr(args, 'probe_ffp_enable', False):
-                    prev_mode = model.training
-                    model.train(True)  # ensure BN running stats can update (BN-specific)
-
-                    # Optional: Stochastic BatchNorm Momentum (SBM)
-                    # Modes: IID random gate in [0,1] or Temporally-Correlated Stochastic Momentum (TCSM)
-                    use_cg_bnmm = bool(getattr(args, 'probe_cg_bnmm_enable', False)) and (args.arch == 'tanet')
-                    mom_min = 0.01
-                    mom_max = 0.10
-                    # TCSM controls
-                    tcsm_enable = bool(getattr(args, 'probe_sbm_tcsm_enable', False))
-                    tcsm_rho = float(getattr(args, 'probe_sbm_rho', 0.8))
-                    tcsm_prev_gate = float(getattr(args, 'probe_sbm_init', 0.5))
-
-                    # Track original BN momentum to restore after probes
-                    orig_momentum = {}
-                    if use_cg_bnmm:
-                        for layer_name, layer in chosen_layers:
-                            if isinstance(layer, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
-                                orig_momentum[layer_name] = layer.momentum
-
-                    probes_run = 0
-                    backoff_used = 0
-
-                    # Initialize per-layer momentum for first pass
-                    next_momentum = {}
-                    if use_cg_bnmm:
-                        init_m = (mom_min + mom_max) * 0.5
-                        for layer_name, layer in chosen_layers:
-                            if isinstance(layer, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
-                                next_momentum[layer_name] = init_m
-
-                    for k in range(int(getattr(args, 'probe_ffp_steps', 1))):
-                        try:
-                            with torch.no_grad():
-                                # Apply per-layer momentum before this probe forward
-                                if use_cg_bnmm:
-                                    for layer_name, layer in chosen_layers:
-                                        if isinstance(layer, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)) and layer_name in next_momentum:
-                                            layer.momentum = float(next_momentum[layer_name])
-
-                                # Use current batch as probe input (forward-only)
-                                x_probe = input
-                                use_amp = bool(getattr(args, 'probe_amp', True))
-                                if use_amp and torch.cuda.is_available():
-                                    from torch.cuda.amp import autocast
-                                    with autocast():
-                                        y = model(x_probe)
-                                else:
-                                    y = model(x_probe)
-
-                                # Compute SBM gate in [0,1] for PAP momentum modulation
-                                if tcsm_enable:
-                                    # Temporally-Correlated: convex-combination AR(1)-like update
-                                    u = float(torch.rand(1).item())
-                                    conf = float(tcsm_rho * tcsm_prev_gate + (1.0 - tcsm_rho) * u)
-                                    conf = min(max(conf, 0.0), 1.0)
-                                    tcsm_prev_gate = conf
-                                else:
-                                    # IID random gate
-                                    conf = 1 #float(torch.rand(1).item())
-
-                                # Update per-layer momentum for the next pass using Stochastic-Gated BatchNorm Momentum
-                                if use_cg_bnmm:
-                                    # Confidence-only trust -> per-layer momentum
-                                    updated_momentum = {}
-                                    trust = float(min(max(conf, 0.0), 1.0))
-                                    for layer_name, layer in chosen_layers:
-                                        if not isinstance(layer, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
-                                            continue
-                                        m_val = mom_min + trust * (mom_max - mom_min)
-                                        updated_momentum[layer_name] = m_val
-                                    next_momentum = updated_momentum
-
-                                if logger is not None:
-                                    if use_cg_bnmm:
-                                        avg_m = np.mean(list(next_momentum.values())) if len(next_momentum) > 0 else float('nan')
-                                        mode = 'TCSM' if tcsm_enable else 'IID'
-                                        logger.debug(f"[PAP][Stochastic BatchNorm Momentum:{mode}] probe {k+1}: gate={conf:.4f}, avg_momentum={avg_m:.4f}, amp={use_amp}")
-                                    else:
-                                        logger.debug(f"[PAP] probe {k+1}: gate={conf:.4f}, amp={use_amp}")
-
-                                probes_run += 1
-                        except RuntimeError as e:
-                            if 'out of memory' in str(e).lower():
-                                torch.cuda.empty_cache()
-                                backoff_used += 1
-                                if logger is not None:
-                                    logger.warning(f"[PAP] OOM during probe pass {k+1}. Backoff {backoff_used}/{getattr(args, 'probe_max_backoff', 1)}; skipping remaining probes.")
-                                if backoff_used >= int(getattr(args, 'probe_max_backoff', 1)):
-                                    break
-                            else:
-                                if logger is not None:
-                                    logger.warning(f"[PAP] Probe error: {e}")
-                                break
-                        except Exception as e:
-                            if logger is not None:
-                                logger.warning(f"[PAP] Probe exception: {e}")
-                            break
-
-                    # Restore BN momentum
-                    if use_cg_bnmm:
-                        for layer_name, layer in chosen_layers:
-                            if isinstance(layer, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)) and layer_name in orig_momentum:
-                                layer.momentum = orig_momentum[layer_name]
-
-                    if logger is not None:
-                        logger.info(f"[PAP] Completed {probes_run} forward-only probe pass(es); model warmed up.")
-                    model.train(prev_mode)
-
                 # todo ############################################################
                 # todo ##################################### set up the optimizer
                 # todo ############################################################
@@ -345,6 +294,7 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                             'args.stat_type of str  is deprecated, use list instead. To add the implementation for case of Video swin transformer. ')
                     elif isinstance(args.stat_type, list):
                         stat_reg_hooks = []
+                        layer_hook_count_map = {}  # map: layer_id -> number of hooks added for this matched layer
                         for layer_id, (chosen_layer_name, chosen_layer) in enumerate(chosen_layers):
                             for block_name in args.chosen_blocks:
                                 if block_name in chosen_layer_name:
@@ -361,6 +311,37 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                                                                        before_norm=args.before_norm,
                                                                        if_sample_tta_aug_views=args.if_sample_tta_aug_views,
                                                                        n_augmented_views=args.n_augmented_views))
+                                    hooks_for_this_layer = 1
+                                    # Optional DWT subband alignment hook
+                                    if getattr(args, 'dwt_align_enable', False) and list_dwt_stats_clean_new is not None:
+                                        clean_band_stats = list_dwt_stats_clean_new[layer_id]
+                                        if clean_band_stats is not None:
+                                            # filter lambdas to only bands with available stats
+                                            base_lambdas = {
+                                                'LL': getattr(args, 'dwt_align_lambda_ll', 0.0),
+                                                'LH': getattr(args, 'dwt_align_lambda_lh', 0.0),
+                                                'HL': getattr(args, 'dwt_align_lambda_hl', 0.0),
+                                                'HH': getattr(args, 'dwt_align_lambda_hh', 0.0),
+                                            }
+                                            band_lambdas = {b: lam for b, lam in base_lambdas.items() if b in clean_band_stats and lam > 0}
+                                            if len(band_lambdas) > 0:
+                                                stat_reg_hooks.append(
+                                                    CombineNormStatsRegHook_DWT(
+                                                        chosen_layer,
+                                                        clip_len=args.clip_length,
+                                                        dwt_levels=getattr(args, 'dwt_align_levels', 1),
+                                                        clean_stats_per_band=clean_band_stats,
+                                                        band_lambdas=band_lambdas,
+                                                        reg_type=args.reg_type,
+                                                        moving_avg=args.moving_avg,
+                                                        momentum=args.momentum_mvg,
+                                                        before_norm=args.before_norm,
+                                                        if_sample_tta_aug_views=args.if_sample_tta_aug_views,
+                                                        n_augmented_views=args.n_augmented_views,
+                                                    )
+                                                )
+                                                hooks_for_this_layer += 1
+                                    layer_hook_count_map[layer_id] = hooks_for_this_layer
                                     break
                 elif args.stat_reg == 'BNS':
                     # todo  regularization on BNS statistics
@@ -438,11 +419,24 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                     raise NotImplementedError(f'Incorrect model type {args.arch}')
 
                 loss_ce = criterion(output, target)
-                
+
+                # Sum total regularization loss and track per-band DWT losses if available
                 loss_reg = torch.tensor(0).float().to(device)
+                loss_reg_base = torch.tensor(0).float().to(device)
+                loss_reg_dwt = torch.tensor(0).float().to(device)
+                per_band_totals = {b: torch.tensor(0.0, device=device) for b in ['LL', 'LH', 'HL', 'HH']}
                 if args.stat_reg:
                     for hook in stat_reg_hooks:
-                        loss_reg += hook.r_feature.to(device)
+                        hook_loss = hook.r_feature.to(device)
+                        loss_reg += hook_loss
+                        # Aggregate DWT per-band losses from hooks that expose them
+                        if hasattr(hook, 'r_feature_bands') and isinstance(hook.r_feature_bands, dict):
+                            loss_reg_dwt += hook_loss
+                            for b, v in hook.r_feature_bands.items():
+                                if b in per_band_totals:
+                                    per_band_totals[b] = per_band_totals[b] + v.to(device)
+                        else:
+                            loss_reg_base += hook_loss
                 else:
                     raise Exception(f'undefined regularization type {args.stat_reg}')
                 
@@ -455,13 +449,6 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                 # Include prediction consistency if enabled
                 if if_pred_consistency:
                     loss_components.append(args.lambda_pred_consis * loss_consis)
-                    
-                    # Conditionally include CE loss when using consistency
-                    if hasattr(args, 'include_ce_in_consistency') and args.include_ce_in_consistency:
-                        loss_components.append(loss_ce)
-                # else:
-                #     # Always include CE loss when no consistency
-                #     loss_components.append(loss_ce)
                 
                 loss = sum(loss_components)
 
@@ -469,10 +456,18 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                 loss.backward()
                 optimizer.step()
 
-                losses_ce.update(loss_ce.item(), actual_bz)
                 losses_reg.update(loss_reg.item(), actual_bz)
                 if if_pred_consistency:
                     losses_consis.update(loss_consis.item(), actual_bz)
+                # Update DWT per-band meters if enabled
+                if dwt_align_enabled and dwt_band_meters:
+                    for b in ['LL', 'LH', 'HL', 'HH']:
+                        val_b = per_band_totals[b].item() if isinstance(per_band_totals[b], torch.Tensor) else float(per_band_totals[b])
+                        dwt_band_meters[b].update(val_b, actual_bz)
+                    # Also update base vs DWT totals
+                    if losses_reg_base is not None and losses_reg_dwt is not None:
+                        losses_reg_base.update(loss_reg_base.item(), actual_bz)
+                        losses_reg_dwt.update(loss_reg_dwt.item(), actual_bz)
 
             # Predictive entropy (per batch over last step output)
             with torch.no_grad():
@@ -541,8 +536,11 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                 for layer_id, (chosen_layer_name, chosen_layer) in enumerate(chosen_layers):
                     for block_name in args.chosen_blocks:
                         if block_name in chosen_layer_name:
-                            stat_reg_hooks[hook_layer_counter].add_hook_back(chosen_layer)
-                            hook_layer_counter += 1
+                            # Re-attach hooks for this layer according to counts tracked during creation
+                            n_hooks = layer_hook_count_map.get(layer_id, 0)
+                            for _ in range(n_hooks):
+                                stat_reg_hooks[hook_layer_counter].add_hook_back(chosen_layer)
+                                hook_layer_counter += 1
                 assert hook_layer_counter == len(stat_reg_hooks)
 
             if args.verbose:
@@ -554,6 +552,18 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                             'Prec@5 {top5.val:.3f} ({top5.avg:.3f})').format(
                     batch_id, len(tta_loader), epoch=epoch_id+1, batch_time=batch_time, loss_reg=losses_reg, loss_consis=losses_consis,
                     top1=top1, top5=top5)
+                # Optionally append DWT per-band losses and reg breakdown
+                if dwt_align_enabled and dwt_band_meters:
+                    # Base vs DWT breakdown
+                    if losses_reg_base is not None and losses_reg_dwt is not None:
+                        base_part = f'Loss reg base {losses_reg_base.val:.4f} ({losses_reg_base.avg:.4f})'
+                        dwt_part = f'Loss reg dwt {losses_reg_dwt.val:.4f} ({losses_reg_dwt.avg:.4f})'
+                        base_msg = base_msg + '\t' + base_part + '\t' + dwt_part
+                    band_parts = []
+                    for b in ['LL', 'LH', 'HL', 'HH']:
+                        m = dwt_band_meters[b]
+                        band_parts.append(f'DWT_{b} {m.val:.4f} ({m.avg:.4f})')
+                    base_msg = base_msg + '\t' + '\t'.join(band_parts)
                 logger.debug(base_msg)
 
     epoch_result_list.append(top1.avg)

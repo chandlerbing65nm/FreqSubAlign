@@ -91,6 +91,21 @@ parser.add_argument('--dwt_component', type=str, default='LL',
                     help='DWT component(s) to use for reconstruction (LL, LH, HL, HH or combinations like LL+LH)')
 parser.add_argument('--dwt_levels', type=int, default=1,
                     help='Number of DWT decomposition levels (K>=1). Components are selected at the deepest level.')
+# ========================= DWT Subband Alignment (Hook) ==========================
+parser.add_argument('--dwt_align_enable', type=bool, default=False,
+                    help='Enable DWT subband statistics alignment hook')
+parser.add_argument('--dwt_align_levels', type=int, default=1,
+                    help='DWT decomposition levels for alignment (deepest level used)')
+parser.add_argument('--dwt_align_lambda_ll', type=float, default=1.0,
+                    help='Lambda weight for LL subband alignment')
+parser.add_argument('--dwt_align_lambda_lh', type=float, default=1.0,
+                    help='Lambda weight for LH subband alignment')
+parser.add_argument('--dwt_align_lambda_hl', type=float, default=1.0,
+                    help='Lambda weight for HL subband alignment')
+parser.add_argument('--dwt_align_lambda_hh', type=float, default=1.0,
+                    help='Lambda weight for HH subband alignment')
+parser.add_argument('--dwt_stats_npz_file', type=str, default='',
+                    help='Path to NPZ file containing clean DWT subband stats per chosen layer: keys like LL_mean, LL_var, LH_mean, LH_var, HL_mean, HL_var, HH_mean, HH_var')
 parser.add_argument('--use_src_stat_in_reg', type=bool, default=True,
                     help='whether to use source statistics in the regularization loss')
 parser.add_argument('--fix_BNS', type=bool, default=True,
@@ -121,37 +136,9 @@ parser.add_argument('--before_norm', action='store_true')
 parser.add_argument('--reduce_dim', type=bool, default=True)
 parser.add_argument('--reg_type', type=str, default='l1_loss')
 parser.add_argument('--chosen_blocks', default=['layer3', 'layer4'])
-parser.add_argument('--adaptive_choose_blocks', action='store_true',
-                    help='Enable adaptive selection of chosen_blocks based on BN metrics')
-parser.add_argument('--blocks_metric', type=str, default='entropy', choices=['entropy', 'fisher'],
-                    help='Metric used to select blocks adaptively: entropy (lower is better) or fisher (higher is better)')
-parser.add_argument('--blocks_combo', type=str, default='auto', choices=['auto', 'single', 'pair', 'triple', 'all'],
-                    help='Which combination size to consider among the 15 combos: auto lets the metric decide with simple heuristic')
-parser.add_argument('--blocks_agg', type=str, default='sum', choices=['sum', 'mean'],
-                    help='Aggregation across layers inside a combination')
-parser.add_argument('--blocks_probe_batches', type=int, default=1,
-                    help='How many probe batches to use to estimate BN metrics for adaptive selection')
-parser.add_argument('--blocks_reselect_every', type=int, default=0,
-                     help='If >0 and adaptive selection is enabled, re-select chosen_blocks every N adaptation epochs')
 parser.add_argument('--moving_avg', type=bool, default=True)
 parser.add_argument('--n_gradient_steps', type=int, default=1,
                     help='number of gradient steps per sample')
-
-# ========================= Pre-Adaptation Probing (PAP) ==========================
-parser.add_argument('--probe_ffp_enable', type=bool, default=False,
-                    help='Enable Fail-Forward Probing: forward-only warmup before adaptation to initialize runtime states (BN/AMP/autotune)')
-parser.add_argument('--probe_ffp_steps', type=int, default=1,
-                    help='Number of forward-only probe passes before adaptation (each pass is eval->train gated)')
-parser.add_argument('--probe_conf_thresh', type=float, default=0.6,
-                    help='Confidence threshold (max softmax) to allow BN running stats updates during probe')
-parser.add_argument('--probe_amp', type=bool, default=True,
-                    help='Use autocast mixed precision during probe forwards (if supported)')
-parser.add_argument('--probe_max_backoff', type=int, default=1,
-                    help='Max backoff attempts on OOM during probe (currently used to skip remaining probes)')
-
-# ========================= PAP: Stochastic-Gated BatchNorm Momentum ==========================
-parser.add_argument('--probe_cg_bnmm_enable', type=bool, default=False,
-                    help='Enable stochastic (random 0-1) per-layer BatchNorm momentum modulation during PAP (BN models, e.g., TANet)')
 
 # ========================= Input Configuration ==========================
 parser.add_argument('--full_res', action='store_true')

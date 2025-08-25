@@ -240,3 +240,187 @@ def load_precomputed_statistics(args, n_layers):
     list_spatial_var_clean = list(np.load(args.spatial_var_clean_file, allow_pickle=True)) if 'spatial' in args.stat_type else [None]* n_layers
     return list_temp_mean_clean, list_temp_var_clean, list_spatiotemp_mean_clean, list_spatiotemp_var_clean, list_spatial_mean_clean, list_spatial_var_clean
 
+
+def compute_dwt_subband_statistics(model=None, args=None, logger=None, log_time=None):
+    """
+    Compute per-layer DWT subband mean/var (LL, LH, HL, HH) over the chosen normalization layers and save as NPZ.
+
+    Output NPZ keys (each is a list aligned with chosen layers, dtype=object):
+      - 'LL_mean', 'LL_var', 'LH_mean', 'LH_var', 'HL_mean', 'HL_var', 'HH_mean', 'HH_var'
+
+    Layers used:
+      - TANet: nn.BatchNorm2d, nn.BatchNorm3d
+      - Video Swin: nn.LayerNorm (skip the first LN as elsewhere)
+    """
+    from utils.norm_stats_utils import CombineNormStatsRegHook_DWT
+
+    bands = ['LL', 'LH', 'HL', 'HH']
+
+    # Choose layers
+    if args.arch == 'tanet':
+        candidate_layers = [nn.BatchNorm2d, nn.BatchNorm3d]
+        chosen_layers = choose_layers(model, candidate_layers)
+    elif args.arch == 'videoswintransformer':
+        candidate_layers = [nn.LayerNorm]
+        chosen_layers = choose_layers(model, candidate_layers)
+        chosen_layers = chosen_layers[1:]
+    else:
+        candidate_layers = [nn.BatchNorm2d, nn.BatchNorm3d]
+        chosen_layers = choose_layers(model, candidate_layers)
+
+    # Hook to compute batch subband stats
+    class ComputeDWTSubbandStatsHook:
+        def __init__(self, module, clip_len, dwt_levels, before_norm=False,
+                     if_sample_tta_aug_views=False, n_augmented_views=1):
+            self.clip_len = clip_len
+            self.dwt_levels = max(1, int(dwt_levels))
+            self.before_norm = before_norm
+            self.if_sample_tta_aug_views = if_sample_tta_aug_views
+            self.n_augmented_views = n_augmented_views
+            self.hook = module.register_forward_hook(self.hook_fn)
+            self.results = {b: {'mean': None, 'var': None} for b in bands}
+
+        def hook_fn(self, module, inp, out):
+            try:
+                feature = inp[0] if self.before_norm else out
+                # Reformat to N,C,T,H,W
+                if isinstance(module, nn.BatchNorm1d):
+                    return
+                elif isinstance(module, nn.BatchNorm2d):
+                    nmt, c, h, w = feature.size()
+                    t = self.clip_len
+                    if self.if_sample_tta_aug_views:
+                        m = self.n_augmented_views
+                        bz = nmt // (m * t)
+                        feat = feature.view(bz * m, t, c, h, w).permute(0, 2, 1, 3, 4).contiguous()
+                    else:
+                        bz = nmt // t
+                        feat = feature.view(bz, t, c, h, w).permute(0, 2, 1, 3, 4).contiguous()
+                elif isinstance(module, nn.BatchNorm3d):
+                    bz, c, t, h, w = feature.size()
+                    feat = feature
+                elif isinstance(module, nn.LayerNorm):
+                    bz, t, h, w, c = feature.size()
+                    feat = feature.permute(0, 4, 1, 2, 3).contiguous()
+                else:
+                    return
+
+                # Apply multi-level 2D DWT per frame
+                LL, LH, HL, HH = CombineNormStatsRegHook_DWT._dwt2d_multi_level(feat, self.dwt_levels)
+                subband_tensors = {'LL': LL, 'LH': LH, 'HL': HL, 'HH': HH}
+                for b in bands:
+                    sb = subband_tensors[b]
+                    c = sb.shape[1]
+                    mean_c = sb.mean(dim=(0, 2, 3, 4))  # (C,)
+                    var_c = sb.permute(1, 0, 2, 3, 4).contiguous().view(c, -1).var(1, unbiased=False)
+                    self.results[b]['mean'] = mean_c
+                    self.results[b]['var'] = var_c
+            except Exception:
+                # If shape too small for the requested levels, leave results as None
+                for b in bands:
+                    self.results[b]['mean'] = None
+                    self.results[b]['var'] = None
+
+        def close(self):
+            self.hook.remove()
+
+    # Build hooks and meters
+    compute_stat_hooks = []
+    list_mean_meters = {b: [] for b in bands}
+    list_var_meters = {b: [] for b in bands}
+    seen = {b: [] for b in bands}
+
+    for _, layer_ in chosen_layers:
+        hook = ComputeDWTSubbandStatsHook(
+            layer_,
+            clip_len=args.clip_length,
+            dwt_levels=getattr(args, 'dwt_align_levels', 1),
+            before_norm=getattr(args, 'before_norm', False),
+            if_sample_tta_aug_views=getattr(args, 'if_sample_tta_aug_views', False),
+            n_augmented_views=getattr(args, 'n_augmented_views', 1),
+        )
+        compute_stat_hooks.append(hook)
+        for b in bands:
+            list_mean_meters[b].append(AverageMeter())
+            list_var_meters[b].append(AverageMeter())
+            seen[b].append(False)
+
+    # Data loader
+    if args.arch == 'tanet':
+        n_clips = int(args.sample_style.split('-')[-1])
+        data_loader = torch.utils.data.DataLoader(
+            get_dataset_tanet(args, split='val', dataset_type='eval'),
+            batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers, pin_memory=True,
+        )
+    elif args.arch == 'videoswintransformer':
+        n_clips = args.num_clips
+        data_loader = torch.utils.data.DataLoader(
+            get_dataset_videoswin(args, split='val', dataset_type='eval'),
+            batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers, pin_memory=True,
+        )
+    else:
+        n_clips = 1
+        data_loader = torch.utils.data.DataLoader(
+            get_dataset(args, split='val'),
+            batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers, pin_memory=True,
+        )
+
+    model.eval()
+    with torch.no_grad():
+        for batch_id, (inp, target) in enumerate(data_loader):
+            actual_bz = inp.shape[0]
+            inp = inp.to(device)
+            if args.arch == 'tanet':
+                inp = inp.view(-1, 3, inp.size(2), inp.size(3))
+                inp = inp.view(actual_bz * args.test_crops * n_clips,
+                               args.clip_length, 3, inp.size(2), inp.size(3))
+                _ = model(inp)
+            elif args.arch == 'videoswintransformer':
+                _ = model(inp)
+            else:
+                inp = inp.reshape((-1,) + inp.shape[2:])
+                _ = model(inp)
+
+            if batch_id % 1000 == 0:
+                print(f'{batch_id}/{len(data_loader)} batches completed ...')
+
+            # Aggregate results from hooks
+            for hook_id, stat_hook in enumerate(compute_stat_hooks):
+                for b in bands:
+                    mean_b = stat_hook.results[b]['mean']
+                    var_b = stat_hook.results[b]['var']
+                    if mean_b is not None and var_b is not None:
+                        list_mean_meters[b][hook_id].update(mean_b, n=actual_bz)
+                        list_var_meters[b][hook_id].update(var_b, n=actual_bz)
+                        seen[b][hook_id] = True
+
+    # Prepare lists aligned with chosen layers
+    out = {f'{b}_mean': [] for b in bands}
+    out.update({f'{b}_var': [] for b in bands})
+    for b in bands:
+        for hook_id in range(len(chosen_layers)):
+            if seen[b][hook_id]:
+                out[f'{b}_mean'].append(list_mean_meters[b][hook_id].avg.cpu().numpy())
+                out[f'{b}_var'].append(list_var_meters[b][hook_id].avg.cpu().numpy())
+            else:
+                out[f'{b}_mean'].append(None)
+                out[f'{b}_var'].append(None)
+
+    # Save NPZ matching loader in TTA
+    levels = getattr(args, 'dwt_align_levels', 1)
+    save_path = osp.join(args.result_dir, f'dwt_subband_stats_L{levels}_{log_time}.npz')
+    np.savez(
+        save_path,
+        LL_mean=np.array(out['LL_mean'], dtype=object), LL_var=np.array(out['LL_var'], dtype=object),
+        LH_mean=np.array(out['LH_mean'], dtype=object), LH_var=np.array(out['LH_var'], dtype=object),
+        HL_mean=np.array(out['HL_mean'], dtype=object), HL_var=np.array(out['HL_var'], dtype=object),
+        HH_mean=np.array(out['HH_mean'], dtype=object), HH_var=np.array(out['HH_var'], dtype=object),
+    )
+    if logger is not None:
+        logger.debug(f'Saved DWT subband stats to {save_path}')
+    else:
+        print(f'Saved DWT subband stats to {save_path}')
+
