@@ -101,7 +101,7 @@ if __name__ == '__main__':
     set_seed(142)
     
     # Choose model architecture and dataset
-    args.arch = 'tanet'  # videoswintransformer, tanet
+    args.arch = 'videoswintransformer'  # videoswintransformer, tanet
     args.dataset = 'ucf101'  # somethingv2, ucf101, uffia
 
     # Map dataset names to directory names
@@ -144,21 +144,21 @@ if __name__ == '__main__':
     args.n_epoch_adapat = 1
 
     # ========================= New Arguments ==========================
-    args.corruption_list = 'full' # mini, full, continual, continual_mini
+    args.corruption_list = 'continual' # mini, full, continual, random
     # args.dwt_preprocessing = True
     # args.dwt_component = 'LL'
     # args.dwt_levels = 1
 
-    # # DWT subband alignment hook
-    # args.dwt_align_enable = True
-    # args.dwt_align_levels = 1  # must match the NPZ (L1)
-    # args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt/dwt_subband_stats_L1_20250825_134144.npz'
+    # DWT subband alignment hook
+    args.dwt_align_enable = True
+    args.dwt_align_levels = 1  # must match the NPZ (L1)
+    args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt/dwt_subband_stats_L1_20250825_134144.npz'
 
-    # # Choose alignment weights (example: LL only)
-    # args.dwt_align_lambda_ll = 1.0
-    # args.dwt_align_lambda_lh = 1.0
-    # args.dwt_align_lambda_hl = 1.0
-    # args.dwt_align_lambda_hh = 1.0
+    # Choose alignment weights
+    args.dwt_align_lambda_ll = 1.0
+    args.dwt_align_lambda_lh = 1.0
+    args.dwt_align_lambda_hl = 1.0
+    args.dwt_align_lambda_hh = 1.0
 
     # ============================================================================================
 
@@ -218,9 +218,9 @@ if __name__ == '__main__':
         corruptions = [
             'continual',
         ]
-    elif getattr(args, 'corruption_list', 'full') == 'continual_mini':
+    elif getattr(args, 'corruption_list', 'full') == 'random':
         corruptions = [
-            'continual_mini',
+            'random',
         ]
     
     # Set up result directory based on evaluation mode

@@ -31,7 +31,7 @@ if __name__ == '__main__':
     args = get_opts()
     args.gpus = [0]
     args.arch = 'videoswintransformer'
-    args.dataset = 'uffia'
+    args.dataset = 'ucf101'
     args.vid_format = '.mp4' # .webm, .avi
 
     # todo ========================= To Specify ==========================

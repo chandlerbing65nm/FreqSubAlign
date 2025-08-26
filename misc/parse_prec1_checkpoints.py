@@ -31,23 +31,23 @@ from bisect import bisect_right
 from typing import Dict, List, Tuple
 
 # Default log paths (can be overridden via CLI)
-DEFAULT_VITTA = "/users/doloriel/work/Repo/ViTTA/logs/august_24_2025/output_12517305.txt"
-DEFAULT_ADWT = "/users/doloriel/work/Repo/ViTTA/logs/august_24_2025/output_12517308.txt"
+DEFAULT_VITTA = "/users/doloriel/work/Repo/ViTTA/logs/output_12528532.txt"
+DEFAULT_ADWT = "/users/doloriel/work/Repo/ViTTA/logs/output_12528553.txt"
 
 # Checkpoints (0-based counts as they appear in: TTA Epoch1: [N/TOTAL])
 CHECKPOINTS = {
-    "gauss": 3782,
-    "pepper": 7565,
-    "salt": 11348,
-    "shot": 15132,
-    "zoom": 18193,
-    "impulse": 22696,
-    "defocus": 26479,
-    "motion": 30260,
-    "jpeg": 34043,
-    "contrast": 37826,
-    "rain": 41608,
-    "h265_abr": 45391,
+    "gauss": 315,
+    "pepper": 631,
+    "salt": 947,
+    "shot": 1262,
+    "zoom": 1577,
+    "impulse": 1892,
+    "defocus": 2207,
+    "motion": 2522,
+    "jpeg": 2837,
+    "contrast": 3152,
+    "rain": 3467,
+    "h265_abr": 3782,
 }
 
 LINE_RE = re.compile(

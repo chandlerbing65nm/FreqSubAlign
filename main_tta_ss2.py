@@ -114,7 +114,7 @@ if __name__ == '__main__':
     dataset_dir = dataset_to_dir.get(args.dataset, args.dataset)
 
     # Choose evaluation mode (TTA or source-only)
-    args.tta = False  # Set to False for source-only evaluation
+    args.tta = True  # Set to False for source-only evaluation
     
     # Get model configuration based on architecture and dataset
     model_config = get_model_config(args.arch, args.dataset, tta_mode=args.tta)
@@ -137,35 +137,31 @@ if __name__ == '__main__':
     # Default arguments
     args.gpus = [0]
     args.video_data_dir = f'/scratch/project_465001897/datasets/{dataset_dir}/val_corruptions'
-    args.vid_format = '.mp4' # Only for somethingv2
+    args.vid_format = '.mp4'
 
     args.n_augmented_views = 2
     args.if_sample_tta_aug_views = True
     args.batch_size = 1  # Default to 1 for TTA, can be overridden
 
-    # ========================= Ablation Presets (uncomment ONE group) ==========================
+    # ========================= New Arguments ==========================
+    args.corruption_list = 'random' # mini, full, continual, random
+    # args.dwt_preprocessing = True
+    # args.dwt_component = 'LL'
+    # args.dwt_levels = 1
 
-    # #Group ViTTA
-    # args.probe_ffp_enable = False
-    # args.probe_cg_bnmm_enable = False
-    # args.probe_sbm_tcsm_enable = False
-    # args.n_epoch_adapat = 2
+    # DWT subband alignment hook
+    args.dwt_align_enable = True
+    args.dwt_align_levels = 1  # must match the NPZ (L1)
+    # tanet - ss2
+    args.dwt_stats_npz_file = f'/scratch/project_465001897/datasets/{dataset_dir}/source_statistics_{args.arch}_dwt/dwt_subband_stats_L1_20250826_152139.npz'
+    # # videoswin - ss2
+    # args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/{dataset_dir}/source_statistics_{args.arch}_dwt/...'
 
-    # #Group ViTTA + PAP
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = False
-    # args.probe_sbm_tcsm_enable = False
-    # args.probe_ffp_steps = 1
-    # args.n_epoch_adapat = 2
-
-    # #Group ViTTA + PAP + TCSM
-    # args.probe_ffp_enable = True
-    # args.probe_cg_bnmm_enable = True
-    # args.probe_sbm_tcsm_enable = True
-    # args.probe_sbm_rho = 0.9
-    # args.probe_sbm_init = 0.3
-    # args.probe_ffp_steps = 4
-    # args.n_epoch_adapat = 2
+    # Choose alignment weights
+    args.dwt_align_lambda_ll = 1.0
+    args.dwt_align_lambda_lh = 1.0
+    args.dwt_align_lambda_hl = 1.0
+    args.dwt_align_lambda_hh = 1.0
 
     # ============================================================================================
 
@@ -175,39 +171,60 @@ if __name__ == '__main__':
         args.spatiotemp_var_clean_file = model_config['spatiotemp_var_clean_file']
         print(f"Multi-epoch TTA enabled: Using {args.n_epoch_adapat} adaptation epochs")
 
-        args.include_ce_in_consistency = False
-        suffix = f"celoss={args.include_ce_in_consistency}_adaptepoch={args.n_epoch_adapat}"
-
-        suffix += f"_views{args.n_augmented_views}_bs{args.batch_size}"
-        # Append PAP probe settings
-        suffix += f"_ffp={int(bool(getattr(args, 'probe_ffp_enable', False)))}"
-        if getattr(args, 'probe_ffp_enable', False):
-            suffix += f"_ffpSteps={args.probe_ffp_steps}_ffpAmp={int(bool(args.probe_amp))}_ffpBackoff={args.probe_max_backoff}_ffpConf={args.probe_conf_thresh}"
-            # Append SBM/TCSM flags if enabled
-            if getattr(args, 'probe_cg_bnmm_enable', False):
-                suffix += f"_sbm=1"
-                if getattr(args, 'probe_sbm_tcsm_enable', False):
-                    suffix += f"_tcsm=1_rho={args.probe_sbm_rho}"
-
-        args.result_suffix = suffix
+        suffix = f"adaptepoch={args.n_epoch_adapat}"
+        suffix += f"_views{args.n_augmented_views}"
     else:
         # Source-only evaluation parameters
         args.evaluate_baselines = True
-        args.baseline = 'dua'
-        args.result_suffix=f'tta={args.tta}_evalbaseline={args.evaluate_baselines}_baseline={args.baseline}'
+        args.baseline = 'tent' # baseline, shot, tent, dua, rem
+        
+        suffix = f'baseline={args.baseline}'
+
+    # Append preprocessing and alignment settings
+    if getattr(args, 'dwt_preprocessing', False):
+        suffix += f"_dwt{args.dwt_component}-L{args.dwt_levels}"
+    # DWT subband alignment hook settings (for reproducibility)
+    if getattr(args, 'dwt_align_enable', False):
+        suffix += f"_dwtAlign-L{getattr(args, 'dwt_align_levels', 1)}"
+        # Compact lambda encoding: include only lambdas > 0 to keep suffix short
+        lam_ll = getattr(args, 'dwt_align_lambda_ll', 1.0)
+        lam_lh = getattr(args, 'dwt_align_lambda_lh', 1.0)
+        lam_hl = getattr(args, 'dwt_align_lambda_hl', 1.0)
+        lam_hh = getattr(args, 'dwt_align_lambda_hh', 1.0)
+        parts = []
+        if lam_ll > 0: parts.append(f"LL{lam_ll}")
+        if lam_lh > 0: parts.append(f"LH{lam_lh}")
+        if lam_hl > 0: parts.append(f"HL{lam_hl}")
+        if lam_hh > 0: parts.append(f"HH{lam_hh}")
+        if parts:
+            suffix += "_" + "+".join(parts)
+    if getattr(args, 'update_only_bn_affine', False):
+        suffix += "_bnaffine"
+    suffix += f"_corruption={args.corruption_list}"
+    suffix += f"_bs{args.batch_size}"
+    args.result_suffix = suffix
 
     # Set up corruption types to evaluate
-
-    # corruptions = ['gauss_mini', 'pepper_mini', 'salt_mini','shot_mini',
-    #             'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
-    #             'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
-    #             'random_mini'  
-    #             ]
-    corruptions = ['gauss', 'pepper', 'salt','shot',
-                'zoom', 'impulse', 'defocus', 'motion',
-                'jpeg', 'contrast', 'rain', 'h265_abr',
-                'random'  
-                ]
+    if getattr(args, 'corruption_list', 'full') == 'mini':
+        corruptions = [
+            'gauss_mini', 'pepper_mini', 'salt_mini','shot_mini',
+            'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
+            'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
+        ]
+    elif getattr(args, 'corruption_list', 'full') == 'full':
+        corruptions = [
+            'gauss', 'pepper', 'salt', 'shot',
+            'zoom', 'impulse', 'defocus', 'motion',
+            'jpeg', 'contrast', 'rain', 'h265_abr',
+        ]
+    elif getattr(args, 'corruption_list', 'full') == 'continual':
+        corruptions = [
+            'continual',
+        ]
+    elif getattr(args, 'corruption_list', 'full') == 'random':
+        corruptions = [
+            'random',
+        ]
     
     # Set up result directory based on evaluation mode
     if args.tta:
