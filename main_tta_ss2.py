@@ -102,7 +102,7 @@ if __name__ == '__main__':
     set_seed(142)
     
     # Choose model architecture and dataset
-    args.arch = 'tanet'  # videoswintransformer, tanet
+    args.arch = 'videoswintransformer'  # videoswintransformer, tanet
     args.dataset = 'somethingv2'  # somethingv2, ucf101, uffia
 
     # Map dataset names to directory names
@@ -127,10 +127,10 @@ if __name__ == '__main__':
         setattr(args, key, value)
 
     # Critical arguments
-    args.clip_length = 8
+    args.clip_length = 16
     args.test_crops = 3
     args.num_clips = 1
-    args.scale_size = 256
+    args.scale_size = 224 # 256 for TANet, 224 for VideoSwin
     # args.crop_size = 256
     args.input_size = 224
 
@@ -152,10 +152,10 @@ if __name__ == '__main__':
     # DWT subband alignment hook
     args.dwt_align_enable = True
     args.dwt_align_levels = 1  # must match the NPZ (L1)
-    # tanet - ss2
-    args.dwt_stats_npz_file = f'/scratch/project_465001897/datasets/{dataset_dir}/source_statistics_{args.arch}_dwt/dwt_subband_stats_L1_20250826_152139.npz'
-    # # videoswin - ss2
-    # args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/{dataset_dir}/source_statistics_{args.arch}_dwt/...'
+    # # tanet - ss2
+    # args.dwt_stats_npz_file = f'/scratch/project_465001897/datasets/{dataset_dir}/source_statistics_tanet_dwt/dwt_subband_stats_L1_20250826_152139.npz'
+    # videoswin - ss2
+    args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/{dataset_dir}/source_statistics_swin_dwt/dwt_subband_stats_L1_20250826_193856.npz'
 
     # Choose alignment weights
     args.dwt_align_lambda_ll = 1.0

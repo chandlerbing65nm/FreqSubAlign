@@ -1,0 +1,50 @@
+import os
+import sys
+sys.path.append(os.path.abspath('..'))    # last level
+# import os.path as osp
+# from utils.opts import parser
+from utils.opts import get_opts
+from corpus.main_eval import eval
+
+corruptions = ['clean' ]
+
+if __name__ == '__main__':
+    global args
+    args = get_opts()
+    args.gpus = [0]
+    args.arch = 'videoswintransformer'
+    args.dataset = 'somethingv2'
+    args.vid_format = '.mp4' # .mp4, .avi
+
+    # todo ========================= To Specify ==========================
+    args.model_path = '/scratch/project_465001897/datasets/ss2/model_swin/swin_base_patch244_window1677_sthv2.pth'
+
+    args.video_data_dir = '/scratch/project_465001897/datasets/ss2/videos/samples_mp4'  
+    args.val_vid_list = '/scratch/project_465001897/datasets/ss2/videos/split/train_rgb.txt'
+    # todo ========================= To Specify ==========================
+
+    args.batch_size = 12  # 12
+    args.num_clips = 1  # number of temporal clips
+    args.test_crops = 1  # number of spatial crops
+    args.frame_uniform = True
+    args.frame_interval = 2
+    args.scale_size = 224
+    args.patch_size = (2, 4, 4)
+    args.clip_length = 16
+    args.window_size = (16, 7, 7)
+
+    args.tta = True
+    args.evaluate_baselines = not args.tta
+    args.baseline = 'source'
+
+    args.n_augmented_views = None
+    args.n_epoch_adapat = 1
+
+    args.compute_stat = 'mean_var'
+    args.stat_type = 'spatiotemp'
+
+    args.corruptions = 'clean'
+    args.result_dir = f'/scratch/project_465001897/datasets/ss2/source_statistics_swin'
+    eval(args=args, )
+
+

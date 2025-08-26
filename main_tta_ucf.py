@@ -129,7 +129,7 @@ if __name__ == '__main__':
     args.clip_length = 16
     args.test_crops = 3
     args.num_clips = 1
-    args.scale_size = 256 # 256 for TANet, 224 for VideoSwin
+    args.scale_size = 224 # 256 for TANet, 224 for VideoSwin
     # args.crop_size = 256
     args.input_size = 224
 
@@ -144,21 +144,24 @@ if __name__ == '__main__':
     args.n_epoch_adapat = 1
 
     # ========================= New Arguments ==========================
-    args.corruption_list = 'continual' # mini, full, continual, random
+    args.corruption_list = 'random' # mini, full, continual, random
     # args.dwt_preprocessing = True
     # args.dwt_component = 'LL'
     # args.dwt_levels = 1
 
-    # DWT subband alignment hook
-    args.dwt_align_enable = True
-    args.dwt_align_levels = 1  # must match the NPZ (L1)
-    args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt/dwt_subband_stats_L1_20250825_134144.npz'
+    # # DWT subband alignment hook
+    # args.dwt_align_enable = True
+    # args.dwt_align_levels = 1  # must match the NPZ (L1)
+    # # # tanet - ucf101
+    # # args.dwt_stats_npz_file = f'/scratch/project_465001897/datasets/{dataset_dir}/source_statistics_tanet_dwt/dwt_subband_stats_L1_20250825_134144.npz'
+    # # videoswin - ucf101
+    # args.dwt_stats_npz_file = f'/scratch/project_465001897/datasets/{dataset_dir}/source_statistics_swin_dwt/dwt_subband_stats_L1_20250826_185813.npz'
 
-    # Choose alignment weights
-    args.dwt_align_lambda_ll = 1.0
-    args.dwt_align_lambda_lh = 1.0
-    args.dwt_align_lambda_hl = 1.0
-    args.dwt_align_lambda_hh = 1.0
+    # # Choose alignment weights
+    # args.dwt_align_lambda_ll = 1.0
+    # args.dwt_align_lambda_lh = 1.0
+    # args.dwt_align_lambda_hl = 1.0
+    # args.dwt_align_lambda_hh = 1.0
 
     # ============================================================================================
 
