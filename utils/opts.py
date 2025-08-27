@@ -27,8 +27,12 @@ parser.add_argument('--vid_format', default='', type=str,
                     help='video format if not specified in filenames')
 parser.add_argument('--datatype', default='vid', type=str, choices=['vid', 'frame'])
 # Choose corruption list size
-parser.add_argument('--corruption_list', type=str, default='full', choices=['mini', 'full'],
-                    help='Which corruption list to evaluate: mini (quick sanity) or full (complete set)')
+parser.add_argument('--corruption_list', type=str, default='full', choices=['mini', 'full', 'continual', 'random'],
+                    help='Which corruption list to evaluate: mini (quick sanity), full (complete set), continual (mixed sequence), or random (randomized sequence)')
+
+# Optional: print exact validation corruption order as read from list file
+parser.add_argument('--print_val_corrupt_order', action='store_true',
+                    help='If set, prints the exact order of validation corruption types or entries before evaluation')
 
 # ========================= Statistics Files ==========================
 parser.add_argument('--spatiotemp_mean_clean_file', type=str,

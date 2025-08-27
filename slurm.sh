@@ -17,7 +17,7 @@ conda init
 conda activate ttadapt
 
 # Set the working directory
-cd /users/doloriel/work/Repo/ViTTA
+cd /users/doloriel/work/Repo/SWaveletA
 
 # Run the Python script
-python -m main_tta_ss2
+python -m main_tta_ucf

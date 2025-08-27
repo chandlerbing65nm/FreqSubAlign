@@ -2,6 +2,7 @@ import os
 import torch
 import random
 import numpy as np
+import sys
 from utils.opts import get_opts
 from utils.utils_ import get_writer_to_all_result
 from corpus.main_eval import eval
@@ -65,6 +66,8 @@ def get_model_config(arch, dataset='somethingv2', tta_mode=True):
                         'lr': 1e-5,
                         'lambda_pred_consis': 0.05,
                         'momentum_mvg': 0.05,
+                        # DWT subband stats for videoswin - ss2
+                        'dwt_stats_npz_file': '/scratch/project_465001897/datasets/ss2/source_statistics_swin_dwt/dwt_subband_stats_L1_20250826_193856.npz',
                     }
                 })
                 
@@ -88,7 +91,9 @@ def get_model_config(arch, dataset='somethingv2', tta_mode=True):
                     'spatiotemp_var_clean_file': '/scratch/project_465001897/datasets/ss2/source_statistics_tanet/list_spatiotemp_var_20250802_192221.npy',
                     'additional_args': {
                         **config['additional_args'],
-                        'lr': 1e-5
+                        'lr': 1e-5,
+                        # DWT subband stats for tanet - ss2
+                        'dwt_stats_npz_file': '/scratch/project_465001897/datasets/ss2/source_statistics_tanet_dwt/dwt_subband_stats_L1_20250826_152139.npz',
                     }
                 })
     
@@ -121,18 +126,18 @@ if __name__ == '__main__':
     
     # Set model paths and parameters
     args.model_path = model_config['model_path']
-    
-    # Set additional arguments for the selected architecture
-    for key, value in model_config['additional_args'].items():
-        setattr(args, key, value)
 
     # Critical arguments
-    args.clip_length = 16
+    args.clip_length = 16 # 8 for TANet, 16 for VideoSwin
     args.test_crops = 3
     args.num_clips = 1
     args.scale_size = 224 # 256 for TANet, 224 for VideoSwin
     # args.crop_size = 256
     args.input_size = 224
+    
+    # Set additional arguments for the selected architecture
+    for key, value in model_config['additional_args'].items():
+        setattr(args, key, value)
 
     # Default arguments
     args.gpus = [0]
@@ -144,24 +149,24 @@ if __name__ == '__main__':
     args.batch_size = 1  # Default to 1 for TTA, can be overridden
 
     # ========================= New Arguments ==========================
-    args.corruption_list = 'random' # mini, full, continual, random
+    args.corruption_list = 'continual_alternate' # mini, full, continual, random, continual_alternate
     # args.dwt_preprocessing = True
     # args.dwt_component = 'LL'
     # args.dwt_levels = 1
 
-    # DWT subband alignment hook
-    args.dwt_align_enable = True
-    args.dwt_align_levels = 1  # must match the NPZ (L1)
-    # # tanet - ss2
-    # args.dwt_stats_npz_file = f'/scratch/project_465001897/datasets/{dataset_dir}/source_statistics_tanet_dwt/dwt_subband_stats_L1_20250826_152139.npz'
-    # videoswin - ss2
-    args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/{dataset_dir}/source_statistics_swin_dwt/dwt_subband_stats_L1_20250826_193856.npz'
+    # # DWT subband alignment hook
+    # args.dwt_align_enable = True
+    # args.dwt_align_levels = 1  # must match the NPZ
 
-    # Choose alignment weights
-    args.dwt_align_lambda_ll = 1.0
-    args.dwt_align_lambda_lh = 1.0
-    args.dwt_align_lambda_hl = 1.0
-    args.dwt_align_lambda_hh = 1.0
+    # if not os.path.exists(args.dwt_stats_npz_file):
+    #     if not getattr(args, 'print_val_corrupt_order', False):
+    #         print(f"[WARN] DWT stats NPZ not found: {args.dwt_stats_npz_file}")
+
+    # # Choose alignment weights
+    # args.dwt_align_lambda_ll = 1.0
+    # args.dwt_align_lambda_lh = 1.0
+    # args.dwt_align_lambda_hl = 1.0
+    # args.dwt_align_lambda_hh = 1.0
 
     # ============================================================================================
 
@@ -169,7 +174,8 @@ if __name__ == '__main__':
     if args.tta:
         args.spatiotemp_mean_clean_file = model_config['spatiotemp_mean_clean_file']
         args.spatiotemp_var_clean_file = model_config['spatiotemp_var_clean_file']
-        print(f"Multi-epoch TTA enabled: Using {args.n_epoch_adapat} adaptation epochs")
+        if not getattr(args, 'print_val_corrupt_order', False):
+            print(f"Multi-epoch TTA enabled: Using {args.n_epoch_adapat} adaptation epochs")
 
         suffix = f"adaptepoch={args.n_epoch_adapat}"
         suffix += f"_views{args.n_augmented_views}"
@@ -217,15 +223,43 @@ if __name__ == '__main__':
             'zoom', 'impulse', 'defocus', 'motion',
             'jpeg', 'contrast', 'rain', 'h265_abr',
         ]
+    elif getattr(args, 'corruption_list', 'full') == 'continual_alternate':
+        corruptions = [
+            'continual_alternate',
+        ]
     elif getattr(args, 'corruption_list', 'full') == 'continual':
         corruptions = [
-            'continual',
+            'continual', 
         ]
     elif getattr(args, 'corruption_list', 'full') == 'random':
         corruptions = [
             'random',
         ]
-    
+
+    # If only printing the validation corruption order is requested, do not run evaluation/TTA
+    if getattr(args, 'print_val_corrupt_order', False):
+        print("[Info] --print_val_corrupt_order enabled: printing list-file order only (no evaluation).")
+        for corr_id, corr in enumerate(corruptions):
+            args.corruptions = corr
+            print(f'#### Corruption Order Preview ::: {args.corruptions} ####')
+            list_path = f'/scratch/project_465001897/datasets/{dataset_dir}/list_video_perturbations/{args.corruptions}.txt'
+            try:
+                with open(list_path, 'r') as f:
+                    order_entries = []
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        parts = line.split()
+                        if len(parts) >= 1:
+                            order_entries.append(parts[0])
+                print(f"\n[CorruptionOrder] {args.corruptions} - entries in order ({len(order_entries)}):")
+                for idx, entry in enumerate(order_entries):
+                    print(f"  {idx:04d}: {entry}")
+            except Exception as e:
+                print(f"[WARN] Could not read validation corruption order from {list_path}: {e}")
+        sys.exit(0)
+
     # Set up result directory based on evaluation mode
     if args.tta:
         parent_result_dir = f'/scratch/project_465001897/datasets/{dataset_dir}/results/corruptions/{args.arch}_{args.dataset}'
@@ -249,6 +283,24 @@ if __name__ == '__main__':
         # Set up file paths
         args.val_vid_list = f'/scratch/project_465001897/datasets/{dataset_dir}/list_video_perturbations/{args.corruptions}.txt'
         args.result_dir = os.path.join(parent_result_dir, f'{result_prefix}{args.corruptions}')
+        
+        # Optionally print the exact validation corruption order as read from the list file
+        if getattr(args, 'print_val_corrupt_order', False):
+            try:
+                with open(args.val_vid_list, 'r') as f:
+                    order_entries = []
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        parts = line.split()
+                        if len(parts) >= 1:
+                            order_entries.append(parts[0])
+                print(f"\n[CorruptionOrder] {args.corruptions} - entries in order ({len(order_entries)}):")
+                for idx, entry in enumerate(order_entries):
+                    print(f"  {idx:04d}: {entry}")
+            except Exception as e:
+                print(f"[WARN] Could not print validation corruption order from {args.val_vid_list}: {e}")
         
         # Print verbose arguments for each corruption if verbose is enabled
         if args.verbose:

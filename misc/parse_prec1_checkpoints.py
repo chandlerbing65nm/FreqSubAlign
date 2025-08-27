@@ -3,22 +3,21 @@
 Compare ViTTA logs side by side and print Prec@1_avg at specified sample checkpoints.
 
 Default logs:
-  vitta: /users/doloriel/work/Repo/ViTTA/logs/august_24_2025/output_12517305.txt
-  adwt : /users/doloriel/work/Repo/ViTTA/logs/august_24_2025/output_12517308.txt
+  vitta: /users/doloriel/work/Repo/SWaveletA/logs/august_24_2025/output_12517305.txt
+  adwt : /users/doloriel/work/Repo/SWaveletA/logs/august_24_2025/output_12517308.txt
 
 Usage:
   python misc/parse_prec1_checkpoints.py
   python misc/parse_prec1_checkpoints.py --logs log1.txt log2.txt ... [--names name1 name2 ...]
+  python misc/parse_prec1_checkpoints.py --dataset ucf   # use UCF-101 checkpoints (default)
+  python misc/parse_prec1_checkpoints.py --dataset ssv2  # use Something-Something V2 checkpoints
+  python misc/parse_prec1_checkpoints.py --continual /path/to/continual.txt  # derive checkpoints from file
 
 It extracts for lines like:
   2025-08-24 21:09:01,910 - 10 - test_time_adaptation.py - tta_standard - TTA Epoch1: [0/45392] ... Prec@1 0.000 (0.000) ...
 
-For each corruption checkpoint (0-based counts):
-  gauss 3782, pepper 7565, salt 11348, shot 15132, zoom 18193,
-  impulse 22696, defocus 26479, motion 30260, jpeg 34043, contrast 37826,
-  rain 41608, h265_abr 45391
-
-The script prints only Prec@1_avg (the value in parentheses) at those steps, in a side-by-side
+The script uses 1-based step indices internally (adds +1 to the parsed N). It prints only Prec@1_avg
+(the value in parentheses) at those steps, in a side-by-side
 table across all provided logs. If the exact step isn't found, it falls back to the nearest previous
 step silently. Finally, it prints the mean Prec@1_avg across all listed corruptions for each log.
 """
@@ -30,28 +29,126 @@ import sys
 from bisect import bisect_right
 from typing import Dict, List, Tuple
 
-# Default log paths (can be overridden via CLI)
-DEFAULT_VITTA = "/users/doloriel/work/Repo/ViTTA/logs/output_12528532.txt"
-DEFAULT_ADWT = "/users/doloriel/work/Repo/ViTTA/logs/output_12528553.txt"
+# # tanet - ucf
+# DEFAULT_VITTA = "/users/doloriel/work/Repo/SWaveletA/logs/august_25_2025/output_12528532.txt"
+# DEFAULT_SWA = "/users/doloriel/work/Repo/SWaveletA/logs/august_25_2025/output_12528553.txt"
 
-# Checkpoints (0-based counts as they appear in: TTA Epoch1: [N/TOTAL])
-CHECKPOINTS = {
-    "gauss": 315,
-    "pepper": 631,
-    "salt": 947,
-    "shot": 1262,
-    "zoom": 1577,
-    "impulse": 1892,
-    "defocus": 2207,
-    "motion": 2522,
-    "jpeg": 2837,
-    "contrast": 3152,
-    "rain": 3467,
-    "h265_abr": 3782,
+# # tanet - ssv2
+# DEFAULT_VITTA = "/users/doloriel/work/Repo/SWaveletA/logs/output_12537841.txt"
+# DEFAULT_SWA = "/users/doloriel/work/Repo/SWaveletA/logs/output_12537879.txt"
+
+# # videoswin - ucf
+# DEFAULT_VITTA = "/users/doloriel/work/Repo/SWaveletA/logs/output_12540046.txt"
+# DEFAULT_SWA = "/users/doloriel/work/Repo/SWaveletA/logs/output_12540133.txt"
+
+# videoswin - ss2
+DEFAULT_VITTA = ""
+DEFAULT_SWA = ""
+
+# Auto-selection map for default logs based on (arch, dataset)
+# Keys are (arch, dataset) -> [vitta_log, swa_log]
+
+# LL+LH+HL+HH
+DEFAULT_LOGS_BY_COMBO = {
+    ("tanet", "ucf"): [
+        "/scratch/project_465001897/datasets/ucf/results/corruptions/tanet_ucf101/tta_continual/20250825_203523_adaptepoch=1_views2_corruption=continual_bs1",
+        "/scratch/project_465001897/datasets/ucf/results/corruptions/tanet_ucf101/tta_continual/20250825_204203_adaptepoch=1_views2_dwtAlign-L1_LL1.0+LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
+    ],
+    ("tanet", "ssv2"): [
+        "/scratch/project_465001897/datasets/ss2/results/corruptions/tanet_somethingv2/tta_continual/20250826_175113_adaptepoch=1_views2_corruption=continual_bs1",
+        "/scratch/project_465001897/datasets/ss2/results/corruptions/tanet_somethingv2/tta_continual/20250826_175226_adaptepoch=1_views2_dwtAlign-L1_LL1.0+LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
+    ],
+    ("videoswin", "ucf"): [
+        "/scratch/project_465001897/datasets/ucf/results/corruptions/videoswintransformer_ucf101/tta_continual/20250826_192000_adaptepoch=1_views2_corruption=continual_bs1",
+        "/scratch/project_465001897/datasets/ucf/results/corruptions/videoswintransformer_ucf101/tta_continual/20250826_192226_adaptepoch=1_views2_dwtAlign-L1_LL1.0+LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
+    ],
+    ("videoswin", "ssv2"): [
+        "/scratch/project_465001897/datasets/ss2/results/corruptions/videoswintransformer_somethingv2/tta_continual/20250826_194947_adaptepoch=1_views2_corruption=continual_bs1",
+        "/scratch/project_465001897/datasets/ss2/results/corruptions/videoswintransformer_somethingv2/tta_continual/20250826_234019_adaptepoch=1_views2_dwtAlign-L1_LL1.0+LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
+    ],
+}
+
+# # LH+HL+HH
+# DEFAULT_LOGS_BY_COMBO = {
+#     ("tanet", "ucf"): [
+#         "/scratch/project_465001897/datasets/ucf/results/corruptions/tanet_ucf101/tta_continual/20250825_203523_adaptepoch=1_views2_corruption=continual_bs1",
+#         "/scratch/project_465001897/datasets/ucf/results/corruptions/tanet_ucf101/tta_continual/20250827_145310_adaptepoch=1_views2_dwtAlign-L1_LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
+#     ],
+#     ("tanet", "ssv2"): [
+#         "/scratch/project_465001897/datasets/ss2/results/corruptions/tanet_somethingv2/tta_continual/20250826_175113_adaptepoch=1_views2_corruption=continual_bs1",
+#         "/scratch/project_465001897/datasets/ss2/results/corruptions/tanet_somethingv2/tta_continual/20250827_132717_adaptepoch=1_views2_dwtAlign-L1_LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
+#     ],
+#     ("videoswin", "ucf"): [
+#         "/scratch/project_465001897/datasets/ucf/results/corruptions/videoswintransformer_ucf101/tta_continual/20250826_192000_adaptepoch=1_views2_corruption=continual_bs1",
+#         "/scratch/project_465001897/datasets/ucf/results/corruptions/videoswintransformer_ucf101/tta_continual/20250827_145802_adaptepoch=1_views2_dwtAlign-L1_LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
+#     ],
+#     ("videoswin", "ssv2"): [
+#         "/scratch/project_465001897/datasets/ss2/results/corruptions/videoswintransformer_somethingv2/tta_continual/20250826_194947_adaptepoch=1_views2_corruption=continual_bs1",
+#         "/scratch/project_465001897/datasets/ss2/results/corruptions/videoswintransformer_somethingv2/tta_continual/20250827_114943_adaptepoch=1_views2_dwtAlign-L1_LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
+#     ],
+# }
+
+DEFAULT_CONTINUAL_UCF = "/scratch/project_465001897/datasets/ucf/list_video_perturbations/continual.txt"
+DEFAULT_CONTINUAL_SSV2 = "/scratch/project_465001897/datasets/ss2/list_video_perturbations/continual.txt"
+
+# Corruption order used throughout
+CORR_NAMES: List[str] = [
+    "gauss",
+    "pepper",
+    "salt",
+    "shot",
+    "zoom",
+    "impulse",
+    "defocus",
+    "motion",
+    "jpeg",
+    "contrast",
+    "rain",
+    "h265_abr",
+]
+
+# Checkpoints (originally noted as 0-based counts in logs; parser now uses 1-based internally)
+# Top block (smaller totals) corresponds to UCF-101.
+CHECKPOINTS_UCF: Dict[str, int] = {
+    'gauss': 316,
+    'pepper': 632,
+    'salt': 948,
+    'shot': 1263,
+    'zoom': 1578,
+    'impulse': 1893,
+    'defocus': 2208,
+    'motion': 2523,
+    'jpeg': 2838,
+    'contrast': 3153,
+    'rain': 3468,
+    'h265_abr': 3783,
+}
+
+# Bottom block (larger totals) corresponds to Something-Something V2 (SSv2).
+CHECKPOINTS_SSV2: Dict[str, int] = {
+    'gauss': 2065,
+    'pepper': 4130,
+    'salt': 6195,
+    'shot': 8260,
+    'zoom': 10325,
+    'impulse': 12390,
+    'defocus': 14455,
+    'motion': 16520,
+    'jpeg': 18584,
+    'contrast': 20648,
+    'rain': 22712,
+    'h265_abr': 24776,
 }
 
 LINE_RE = re.compile(
     r"TTA\s+Epoch1:\s*\[(?P<step>\d+)/(?:\d+)\].*?Prec@1\s+(?P<inst>[0-9]*\.?[0-9]+)\s*\((?P<avg>[0-9]*\.?[0-9]+)\)",
+)
+
+# Combined regex to capture both Prec@1 and Prec@5 (instantaneous and average) on the same line
+LINE_BOTH_RE = re.compile(
+    r"TTA\s+Epoch1:\s*\[(?P<step>\d+)/(?:\d+)\].*?"
+    r"Prec@1\s+(?P<inst1>[0-9]*\.?[0-9]+)\s*\((?P<avg1>[0-9]*\.?[0-9]+)\).*?"
+    r"Prec@5\s+(?P<inst5>[0-9]*\.?[0-9]+)\s*\((?P<avg5>[0-9]*\.?[0-9]+)\)"
 )
 
 
@@ -69,7 +166,8 @@ def parse_log(path: str) -> Tuple[Dict[int, Tuple[float, float]], List[int]]:
             m = LINE_RE.search(line)
             if not m:
                 continue
-            step = int(m.group("step"))
+            # Use 1-based steps internally so the first record is step=1
+            step = int(m.group("step")) + 1
             inst = float(m.group("inst"))
             avg = float(m.group("avg"))
             # Keep the latest occurrence for a given step
@@ -85,21 +183,117 @@ def parse_log(path: str) -> Tuple[Dict[int, Tuple[float, float]], List[int]]:
     return step_to_vals, steps
 
 
+def parse_log_both(path: str) -> Tuple[
+    Dict[int, Tuple[float, float]],
+    Dict[int, Tuple[float, float]],
+    List[int],
+]:
+    """Parse log file and return two mappings:
+    - step_to_p1: step -> (prec1_inst, prec1_avg)
+    - step_to_p5: step -> (prec5_inst, prec5_avg)
+    and the sorted list of steps.
+    """
+    if not os.path.isfile(path):
+        print(f"Error: log file not found: {path}", file=sys.stderr)
+        sys.exit(1)
+
+    step_to_p1: Dict[int, Tuple[float, float]] = {}
+    step_to_p5: Dict[int, Tuple[float, float]] = {}
+    steps: List[int] = []
+
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            m = LINE_BOTH_RE.search(line)
+            if not m:
+                continue
+            step = int(m.group("step")) + 1  # 1-based
+            inst1 = float(m.group("inst1"))
+            avg1 = float(m.group("avg1"))
+            inst5 = float(m.group("inst5"))
+            avg5 = float(m.group("avg5"))
+            if step not in step_to_p1:
+                steps.append(step)
+            step_to_p1[step] = (inst1, avg1)
+            step_to_p5[step] = (inst5, avg5)
+
+    steps.sort()
+    if not steps:
+        print("Error: No matching 'TTA Epoch1: [...] Prec@1 ... Prec@5 ...' lines found.", file=sys.stderr)
+        sys.exit(2)
+
+    return step_to_p1, step_to_p5, steps
+
+
+def infer_checkpoints_from_continual(path: str) -> Dict[str, int]:
+    """Infer cumulative checkpoints from a continual.txt file.
+
+    Expected line format examples:
+      ucf:  gauss/HorseRiding/v_HorseRiding_g04_c01.mp4 201 41
+      ssv2: gauss/127/116154 52 127
+    We only need the prefix before the first '/', which is the corruption name.
+    Returns a dict mapping corruption -> cumulative count (1-based compatible).
+    """
+    counts = {k: 0 for k in CORR_NAMES}
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                first = line.split()[0]
+                head = first.split("/", 1)[0].lower()
+                if head in counts:
+                    counts[head] += 1
+    except FileNotFoundError:
+        raise
+    # Turn per-corruption counts into cumulative checkpoints in fixed order
+    cum = 0
+    checkpoints: Dict[str, int] = {}
+    for name in CORR_NAMES:
+        cum += counts[name]
+        checkpoints[name] = cum
+    return checkpoints
+
+
 def find_at_or_before(target: int, sorted_steps: List[int]) -> int:
     """Return the step value at or before target using sorted list, or -1 if none."""
     idx = bisect_right(sorted_steps, target) - 1
     return sorted_steps[idx] if idx >= 0 else -1
 
 
-def extract_prec1_avg_for_checkpoints(log_path: str) -> Dict[str, float]:
+def extract_prec1_avg_for_checkpoints(log_path: str, checkpoints: Dict[str, int]) -> Dict[str, float]:
     """Return mapping corruption -> Prec@1_avg for the desired checkpoints (fallback to prior step)."""
     step_to_vals, steps_sorted = parse_log(log_path)
     result: Dict[str, float] = {}
-    for name, target in CHECKPOINTS.items():
-        matched = target if target in step_to_vals else find_at_or_before(target, steps_sorted)
+    for name, target in checkpoints.items():
+        # Prefer exact 1-based match; if missing, try target+1 (tolerate 0-based maps), then fallback
+        if target in step_to_vals:
+            matched = target
+        elif (target + 1) in step_to_vals:
+            matched = target + 1
+        else:
+            matched = find_at_or_before(target, steps_sorted)
         if matched == -1:
             continue  # no data before this target
         _inst, avg = step_to_vals[matched]
+        result[name] = avg
+    return result
+
+
+def extract_prec5_avg_for_checkpoints(log_path: str, checkpoints: Dict[str, int]) -> Dict[str, float]:
+    """Return mapping corruption -> Prec@5_avg for the desired checkpoints (fallback to prior step)."""
+    _p1_map, p5_map, steps_sorted = parse_log_both(log_path)
+    result: Dict[str, float] = {}
+    for name, target in checkpoints.items():
+        if target in p5_map:
+            matched = target
+        elif (target + 1) in p5_map:
+            matched = target + 1
+        else:
+            matched = find_at_or_before(target, steps_sorted)
+        if matched == -1:
+            continue
+        _inst, avg = p5_map[matched]
         result[name] = avg
     return result
 
@@ -110,8 +304,8 @@ def main():
         "--logs",
         type=str,
         nargs="+",
-        default=[DEFAULT_VITTA, DEFAULT_ADWT],
-        help="Paths to one or more log files",
+        default=None,
+        help="Paths to one or more log files. If omitted and --arch is provided, logs are auto-selected by (arch,dataset).",
     )
     ap.add_argument(
         "--names",
@@ -120,9 +314,61 @@ def main():
         default=None,
         help="Optional column names; must match --logs count if provided",
     )
+    # Allow selecting which dataset checkpoint schedule to use. Keep --daset as alias.
+    ap.add_argument(
+        "--dataset",
+        "--daset",
+        dest="dataset",
+        type=str,
+        choices=["ucf", "ssv2"],
+        default="ucf",
+        help="Select checkpoint set: 'ucf' (default) or 'ssv2'",
+    )
+    # Optional architecture selector used for auto-choosing default logs when --logs is omitted
+    ap.add_argument(
+        "--arch",
+        type=str,
+        choices=["tanet", "videoswin"],
+        default=None,
+        help="Model architecture. When set and --logs is omitted, picks default logs for (arch,dataset)",
+    )
+    # Optional continual file to derive checkpoints from; if omitted, auto-detect per dataset
+    ap.add_argument(
+        "--continual",
+        type=str,
+        default=None,
+        help="Path to continual.txt to derive checkpoints. If omitted, tries dataset-specific default.",
+    )
+    ap.add_argument(
+        "--print-checkpoints",
+        action="store_true",
+        help="Print the resolved checkpoint map and exit",
+    )
     args = ap.parse_args()
 
-    logs: List[str] = args.logs
+    # Determine which logs to parse
+    logs: List[str]
+    if args.logs is not None:
+        logs = args.logs
+    else:
+        if args.arch is not None:
+            key = (args.arch, args.dataset)
+            if key in DEFAULT_LOGS_BY_COMBO:
+                logs = DEFAULT_LOGS_BY_COMBO[key]
+                print(f"Auto-selected logs for arch={args.arch}, dataset={args.dataset}", file=sys.stderr)
+            else:
+                print(
+                    f"Error: no default logs configured for arch={args.arch}, dataset={args.dataset}. Please provide --logs.",
+                    file=sys.stderr,
+                )
+                sys.exit(5)
+        else:
+            # Legacy fallback to the module-level defaults
+            logs = [DEFAULT_VITTA, DEFAULT_SWA]
+            print(
+                "Using legacy default logs (no --logs and no --arch provided); consider passing --arch for auto-selection.",
+                file=sys.stderr,
+            )
     if args.names is not None and len(args.names) != len(logs):
         print("Error: --names count must match --logs count", file=sys.stderr)
         sys.exit(3)
@@ -133,49 +379,95 @@ def main():
         else [os.path.basename(p) or p for p in logs]
     )
 
-    # Extract per-log values
-    perlog_values: List[Dict[str, float]] = []
+    # Choose checkpoint map: prefer continual-derived if available, else fallback to hardcoded by dataset
+    checkpoints: Dict[str, int]
+    continual_path = args.continual
+    if continual_path is None:
+        continual_path = DEFAULT_CONTINUAL_UCF if args.dataset == "ucf" else DEFAULT_CONTINUAL_SSV2
+    if continual_path and os.path.isfile(continual_path):
+        try:
+            checkpoints = infer_checkpoints_from_continual(continual_path)
+            print(f"Using checkpoints inferred from: {continual_path}", file=sys.stderr)
+        except Exception as e:
+            print(f"Warning: failed to infer checkpoints from {continual_path}: {e}. Falling back to hardcoded.", file=sys.stderr)
+            checkpoints = CHECKPOINTS_UCF if args.dataset == "ucf" else CHECKPOINTS_SSV2
+    else:
+        checkpoints = CHECKPOINTS_UCF if args.dataset == "ucf" else CHECKPOINTS_SSV2
+
+    if args.print_checkpoints:
+        # Print in canonical order
+        for name in CORR_NAMES:
+            if name in checkpoints:
+                print(f"{name}: {checkpoints[name]}")
+        return
+
+    # Extract per-log values (Top-1 and Top-5)
+    perlog_p1: List[Dict[str, float]] = []
+    perlog_p5: List[Dict[str, float]] = []
     for p in logs:
         try:
-            perlog_values.append(extract_prec1_avg_for_checkpoints(p))
+            perlog_p1.append(extract_prec1_avg_for_checkpoints(p, checkpoints))
+            perlog_p5.append(extract_prec5_avg_for_checkpoints(p, checkpoints))
         except SystemExit:
-            # propagate existing error codes from parse_log
             raise
         except Exception as e:
             print(f"Error parsing {p}: {e}", file=sys.stderr)
             sys.exit(4)
 
-    # Print side-by-side table of Prec@1_avg only
-    widths = [12] + [max(8, len(n)) for n in names]
-    header_line = f"{'corruption':<{widths[0]}}" + " " + " ".join(
-        f"{name:>{widths[i+1]}}" for i, name in enumerate(names)
-    )
+    # Common formatting
+    max_corr_len = max(len(c) for c in checkpoints.keys())
+    col_width = 15
+
+    # --- Top-1 (Prec@1_avg) ---
+    header_line = f"{'corruption':<{max_corr_len}}"
+    for name in names:
+        header_line += f" {name:>{col_width}}"
     print(header_line)
     print("-" * len(header_line))
-
-    # Rows per corruption in defined order
-    for corr in CHECKPOINTS.keys():
-        cells = []
-        for vals in perlog_values:
+    for corr in checkpoints.keys():
+        line = f"{corr:<{max_corr_len}}"
+        for vals in perlog_p1:
             v = vals.get(corr, float("nan"))
-            cells.append(f"{v:.4f}" if v == v else "NA")
-        line = f"{corr:<{widths[0]}}" + " " + " ".join(
-            f"{cells[i]:>{widths[i+1]}}" for i in range(len(cells))
-        )
+            val_str = f"{v:.4f}" if v == v else "NA"
+            line += f" {val_str:>{col_width}}"
         print(line)
-
-    # Means per log (over available corruptions)
     means = []
-    for vals in perlog_values:
+    for vals in perlog_p1:
         arr = [x for x in vals.values() if x == x]
         means.append(sum(arr) / len(arr) if arr else float("nan"))
-
-    mean_cells = [f"{m:.4f}" if m == m else "NA" for m in means]
-    mean_line = f"{'mean':<{widths[0]}}" + " " + " ".join(
-        f"{mean_cells[i]:>{widths[i+1]}}" for i in range(len(mean_cells))
-    )
-    print("-" * len(mean_line))
+    mean_line = f"{'mean':<{max_corr_len}}"
+    for m in means:
+        mean_str = f"{m:.4f}" if m == m else "NA"
+        mean_line += f" {mean_str:>{col_width}}"
+    print("-" * len(header_line))
     print(mean_line)
+
+    # Blank line between tables
+    print()
+
+    # --- Top-5 (Prec@5_avg) ---
+    header_line5 = f"{'corruption':<{max_corr_len}}"
+    for name in names:
+        header_line5 += f" {name:>{col_width}}"
+    print(header_line5)
+    print("-" * len(header_line5))
+    for corr in checkpoints.keys():
+        line = f"{corr:<{max_corr_len}}"
+        for vals in perlog_p5:
+            v = vals.get(corr, float("nan"))
+            val_str = f"{v:.4f}" if v == v else "NA"
+            line += f" {val_str:>{col_width}}"
+        print(line)
+    means5 = []
+    for vals in perlog_p5:
+        arr = [x for x in vals.values() if x == x]
+        means5.append(sum(arr) / len(arr) if arr else float("nan"))
+    mean_line5 = f"{'mean':<{max_corr_len}}"
+    for m in means5:
+        mean_str = f"{m:.4f}" if m == m else "NA"
+        mean_line5 += f" {mean_str:>{col_width}}"
+    print("-" * len(header_line5))
+    print(mean_line5)
 
 
 if __name__ == "__main__":

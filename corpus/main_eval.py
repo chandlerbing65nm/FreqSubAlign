@@ -31,6 +31,9 @@ from config import device
 
 
 def eval(args=None, model = None ):
+    # Early exit in print-only mode: skip all evaluation/TTA work
+    if getattr(args, 'print_val_corrupt_order', False):
+        return [], model
     log_time = time.strftime("%Y%m%d_%H%M%S")
     make_dir(args.result_dir)
     logger = path_logger(args.result_dir, log_time)
