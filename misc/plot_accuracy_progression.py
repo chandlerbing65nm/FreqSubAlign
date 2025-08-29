@@ -36,15 +36,20 @@ from typing import Any, Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 
-# Regex to capture epoch/index (optional) and metrics
-RE_STEP = re.compile(r"TTA\s+Epoch(\d+):\s*\[(\d+)/(\d+)\]")
+# Regex to capture step markers and metrics from different log styles
+# 1) TTA style: "TTA Epoch1: [4/3783] ..."
+RE_STEP_TTA = re.compile(r"TTA\s+Epoch(\d+):\s*\[(\d+)/(\d+)\]")
+# 2) Baseline validate style: "Test: [4/3783] ..."
+RE_STEP_TEST = re.compile(r"Test:\s*\[(\d+)/(\d+)\]")
 # Flexible float (supports integers and scientific notation)
 _FLOAT = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
 RE_P1 = re.compile(rf"Prec@1\s+({_FLOAT})\s*\((({_FLOAT}))\)")
 RE_P5 = re.compile(rf"Prec@5\s+({_FLOAT})\s*\((({_FLOAT}))\)")
 # Generic regex for losses and confidence metrics
-# Loss names: allow non-space tokens (letters, digits, underscore, hyphen, etc.)
+# Loss with name: allow non-space tokens (letters, digits, underscore, hyphen, etc.)
 RE_LOSS = re.compile(rf"Loss\s+([^\s]+)\s+({_FLOAT})\s*\((({_FLOAT}))\)")
+# Bare loss without a name: "Loss 4.7036 (4.7036)" -> will be recorded under key 'total'
+RE_LOSS_BARE = re.compile(rf"Loss\s+({_FLOAT})\s*\((({_FLOAT}))\)")
 RE_CONF = re.compile(rf"Conf\[(.*?)\]\s+({_FLOAT})\s*\((({_FLOAT}))\)")
 # Noise-type section header
 RE_NOISE_HDR = re.compile(r"^#+\s*Starting\s+Evaluation\s+for\s+:::\s*([A-Za-z0-9_\-]+)\s+corruption\s*#+\s*$")
@@ -77,13 +82,17 @@ def parse_log_lines(lines: List[str]) -> Dict[str, Any]:
 
     gstep = 0
     for line in lines:
-            # Anchor on step marker. If absent, skip line entirely.
-            m_step = RE_STEP.search(line)
-            if not m_step:
-                continue
-
-            ep = int(m_step.group(1)) if m_step else -1
-            i = int(m_step.group(2)) if m_step else -1
+            # Anchor on step marker. Support both TTA and baseline validate formats.
+            m_tta = RE_STEP_TTA.search(line)
+            if m_tta:
+                ep = int(m_tta.group(1))
+                i = int(m_tta.group(2))
+            else:
+                m_test = RE_STEP_TEST.search(line)
+                if not m_test:
+                    continue
+                ep = -1
+                i = int(m_test.group(1))
 
             # Accuracies: parse independently, allow missing
             m_p1 = RE_P1.search(line)
@@ -101,7 +110,7 @@ def parse_log_lines(lines: List[str]) -> Dict[str, Any]:
                 t5_i = float("nan")
                 t5_a = float("nan")
 
-            # Parse losses present on this line
+            # Parse losses present on this line (named and bare)
             present_loss: set[str] = set()
             for m in RE_LOSS.finditer(line):
                 name = m.group(1)
@@ -114,6 +123,20 @@ def parse_log_lines(lines: List[str]) -> Dict[str, Any]:
                 losses_inst[name].append(li)
                 losses_avg[name].append(la)
                 present_loss.add(name)
+            # Handle bare total loss (no name)
+            if RE_LOSS_BARE.search(line):
+                m = RE_LOSS_BARE.search(line)
+                if m:
+                    name = "total"
+                    li = float(m.group(1))
+                    la = float(m.group(2))
+                    if name not in losses_inst:
+                        losses_inst[name] = [float("nan")] * gstep
+                        losses_avg[name] = [float("nan")] * gstep
+                        loss_names.append(name)
+                    losses_inst[name].append(li)
+                    losses_avg[name].append(la)
+                    present_loss.add(name)
             # For any known loss not present in this line, append NaN to keep lengths aligned
             for name in loss_names:
                 if name not in present_loss:
@@ -441,6 +464,44 @@ def _find_loss_key(losses: Dict[str, List[float]], keyword: str) -> str | None:
     if keyword in losses:
         return keyword
     return None
+
+
+def _apply_max_steps(data: Dict[str, Any], max_steps: int | None) -> Dict[str, Any]:
+    """Return a sliced copy of parsed data, keeping only first N (or last N if negative) steps.
+
+    If max_steps is None or 0, returns data unchanged.
+    """
+    if not max_steps:
+        return data
+
+    # Decide slice
+    sl = slice(0, max_steps) if max_steps > 0 else slice(max_steps, None)
+
+    def _slice_list(x: List[float] | List[int]) -> List[Any]:
+        return x[sl] if isinstance(x, list) else x
+
+    out: Dict[str, Any] = {}
+    # Top-level series
+    for k in [
+        "step",
+        "epoch",
+        "idx",
+        "top1_inst",
+        "top1_avg",
+        "top5_inst",
+        "top5_avg",
+    ]:
+        if k in data:
+            out[k] = _slice_list(data[k])
+
+    # Nested dicts
+    for k in ["losses_inst", "losses_avg", "conf_inst", "conf_avg"]:
+        if k in data and isinstance(data[k], dict):
+            out[k] = {name: _slice_list(vals) for name, vals in data[k].items()}
+        else:
+            out[k] = data.get(k, {})
+
+    return out
 
 
 def make_plot_selected_compare(
@@ -917,6 +978,12 @@ def main():
         choices=["acc1", "err1", "loss_reg", "loss_consis", "acc5", "err5"],
         help="Select one or more subplots to render: acc1 err1 loss_reg loss_consis acc5 err5. If omitted, default behavior is used.",
     )
+    parser.add_argument(
+        "--max_steps",
+        type=int,
+        default=None,
+        help="Limit plotted steps. If positive, keeps first N steps; if negative, keeps last N steps; default: all steps.",
+    )
 
     args = parser.parse_args()
 
@@ -950,6 +1017,8 @@ def main():
 
     # Parse logs
     data_list = [parse_log(p) for p in file_paths]
+    if args.max_steps is not None:
+        data_list = [_apply_max_steps(d, args.max_steps) for d in data_list]
     for p, d in zip(file_paths, data_list):
         if len(d.get("step", [])) == 0:
             print(f"Warning: No accuracy lines parsed from {p}")
@@ -1003,6 +1072,8 @@ def main():
                 print(f"Warning: Noise '{noise}' missing in one of the logs; skipping.")
                 continue
             d_list = [s[noise] for s in sections_list]
+            if args.max_steps is not None:
+                d_list = [_apply_max_steps(d, args.max_steps) for d in d_list]
 
             # Determine output path per-noise
             if args.out:

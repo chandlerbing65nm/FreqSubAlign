@@ -44,7 +44,7 @@ if __name__ == '__main__':
     args.compute_stat = 'dwt_subbands'
 
     # DWT alignment parameters for stats extraction
-    # K levels for deepest subbands; must match what you'll use at TTA time
+    # args.dwt_align_3d = True
     args.dwt_align_levels = 1
 
     # Output directory for stats NPZ

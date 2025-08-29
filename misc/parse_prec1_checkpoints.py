@@ -49,44 +49,39 @@ DEFAULT_SWA = ""
 # Keys are (arch, dataset) -> [vitta_log, swa_log]
 
 # LL+LH+HL+HH
+# --names noadapt vitta swa_adapt swa_noll swa_nolh swa_nohl swa_nohh swa_l1 swa_l2 swa_3d
 DEFAULT_LOGS_BY_COMBO = {
     ("tanet", "ucf"): [
+        '/scratch/project_465001897/datasets/ucf/results/source/tanet_ucf101/source_continual/20250827_213352_baseline=source_corruption=continual_bs1',
         "/scratch/project_465001897/datasets/ucf/results/corruptions/tanet_ucf101/tta_continual/20250825_203523_adaptepoch=1_views2_corruption=continual_bs1",
+        '/scratch/project_465001897/datasets/ucf/results/corruptions/tanet_ucf101/tta_continual/20250828_202059_adaptepoch=1_views2_dwtAlign2D-L1_adaptive_LL1.0+LH1.0+HL1.0+HH1.0_corruption=continual_bs1',
+        '/scratch/project_465001897/datasets/ucf/results/corruptions/tanet_ucf101/tta_continual/20250827_145310_adaptepoch=1_views2_dwtAlign-L1_LH1.0+HL1.0+HH1.0_corruption=continual_bs1',
+        '/scratch/project_465001897/datasets/ucf/results/corruptions/tanet_ucf101/tta_continual/20250828_181605_adaptepoch=1_views2_dwtAlign2D-L1_LL1.0+HL1.0+HH1.0_corruption=continual_bs1',
+        '/scratch/project_465001897/datasets/ucf/results/corruptions/tanet_ucf101/tta_continual/20250828_181748_adaptepoch=1_views2_dwtAlign2D-L1_LL1.0+LH1.0+HH1.0_corruption=continual_bs1',
+        '/scratch/project_465001897/datasets/ucf/results/corruptions/tanet_ucf101/tta_continual/20250828_182309_adaptepoch=1_views2_dwtAlign2D-L1_LL1.0+LH1.0+HL1.0_corruption=continual_bs1',
         "/scratch/project_465001897/datasets/ucf/results/corruptions/tanet_ucf101/tta_continual/20250825_204203_adaptepoch=1_views2_dwtAlign-L1_LL1.0+LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
+        # '/scratch/project_465001897/datasets/ucf/results/corruptions/tanet_ucf101/tta_continual/20250828_174354_adaptepoch=1_views2_dwtAlign2D-L2_LL1.0+LH1.0+HL1.0+HH1.0_corruption=continual_bs1',
+        # '/scratch/project_465001897/datasets/ucf/results/corruptions/tanet_ucf101/tta_continual/20250828_173254_adaptepoch=1_views2_dwtAlign3D-L1_LL1.0+LH1.0+HL1.0+HH1.0_corruption=continual_bs1',
     ],
     ("tanet", "ssv2"): [
+        '/scratch/project_465001897/datasets/ss2/results/source/tanet_somethingv2/source_continual/20250827_214606_baseline=source_corruption=continual_bs1',
         "/scratch/project_465001897/datasets/ss2/results/corruptions/tanet_somethingv2/tta_continual/20250826_175113_adaptepoch=1_views2_corruption=continual_bs1",
+        "/scratch/project_465001897/datasets/ss2/results/corruptions/tanet_somethingv2/tta_continual/20250827_132717_adaptepoch=1_views2_dwtAlign-L1_LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
         "/scratch/project_465001897/datasets/ss2/results/corruptions/tanet_somethingv2/tta_continual/20250826_175226_adaptepoch=1_views2_dwtAlign-L1_LL1.0+LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
     ],
     ("videoswin", "ucf"): [
+        '/scratch/project_465001897/datasets/ucf/results/source/videoswintransformer_ucf101/source_continual/20250827_213933_baseline=source_corruption=continual_bs1',
         "/scratch/project_465001897/datasets/ucf/results/corruptions/videoswintransformer_ucf101/tta_continual/20250826_192000_adaptepoch=1_views2_corruption=continual_bs1",
+        "/scratch/project_465001897/datasets/ucf/results/corruptions/videoswintransformer_ucf101/tta_continual/20250827_145802_adaptepoch=1_views2_dwtAlign-L1_LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
         "/scratch/project_465001897/datasets/ucf/results/corruptions/videoswintransformer_ucf101/tta_continual/20250826_192226_adaptepoch=1_views2_dwtAlign-L1_LL1.0+LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
     ],
     ("videoswin", "ssv2"): [
+        '/scratch/project_465001897/datasets/ss2/results/source/videoswintransformer_somethingv2/source_continual/20250827_214451_baseline=source_corruption=continual_bs1',
         "/scratch/project_465001897/datasets/ss2/results/corruptions/videoswintransformer_somethingv2/tta_continual/20250826_194947_adaptepoch=1_views2_corruption=continual_bs1",
+        "/scratch/project_465001897/datasets/ss2/results/corruptions/videoswintransformer_somethingv2/tta_continual/20250827_114943_adaptepoch=1_views2_dwtAlign-L1_LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
         "/scratch/project_465001897/datasets/ss2/results/corruptions/videoswintransformer_somethingv2/tta_continual/20250826_234019_adaptepoch=1_views2_dwtAlign-L1_LL1.0+LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
     ],
 }
-
-# # LH+HL+HH
-# DEFAULT_LOGS_BY_COMBO = {
-#     ("tanet", "ucf"): [
-#         "/scratch/project_465001897/datasets/ucf/results/corruptions/tanet_ucf101/tta_continual/20250825_203523_adaptepoch=1_views2_corruption=continual_bs1",
-#         "/scratch/project_465001897/datasets/ucf/results/corruptions/tanet_ucf101/tta_continual/20250827_145310_adaptepoch=1_views2_dwtAlign-L1_LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
-#     ],
-#     ("tanet", "ssv2"): [
-#         "/scratch/project_465001897/datasets/ss2/results/corruptions/tanet_somethingv2/tta_continual/20250826_175113_adaptepoch=1_views2_corruption=continual_bs1",
-#         "/scratch/project_465001897/datasets/ss2/results/corruptions/tanet_somethingv2/tta_continual/20250827_132717_adaptepoch=1_views2_dwtAlign-L1_LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
-#     ],
-#     ("videoswin", "ucf"): [
-#         "/scratch/project_465001897/datasets/ucf/results/corruptions/videoswintransformer_ucf101/tta_continual/20250826_192000_adaptepoch=1_views2_corruption=continual_bs1",
-#         "/scratch/project_465001897/datasets/ucf/results/corruptions/videoswintransformer_ucf101/tta_continual/20250827_145802_adaptepoch=1_views2_dwtAlign-L1_LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
-#     ],
-#     ("videoswin", "ssv2"): [
-#         "/scratch/project_465001897/datasets/ss2/results/corruptions/videoswintransformer_somethingv2/tta_continual/20250826_194947_adaptepoch=1_views2_corruption=continual_bs1",
-#         "/scratch/project_465001897/datasets/ss2/results/corruptions/videoswintransformer_somethingv2/tta_continual/20250827_114943_adaptepoch=1_views2_dwtAlign-L1_LH1.0+HL1.0+HH1.0_corruption=continual_bs1",
-#     ],
-# }
 
 DEFAULT_CONTINUAL_UCF = "/scratch/project_465001897/datasets/ucf/list_video_perturbations/continual.txt"
 DEFAULT_CONTINUAL_SSV2 = "/scratch/project_465001897/datasets/ss2/list_video_perturbations/continual.txt"
@@ -151,6 +146,17 @@ LINE_BOTH_RE = re.compile(
     r"Prec@5\s+(?P<inst5>[0-9]*\.?[0-9]+)\s*\((?P<avg5>[0-9]*\.?[0-9]+)\)"
 )
 
+# Source-only baseline logs use a different prefix (no "TTA Epoch1"), e.g.:
+#   "... training.py - validate - Test: [i/N] ... Prec@1 a (b) ... Prec@5 c (d)"
+LINE_SRC_RE = re.compile(
+    r"validate\s*-\s*Test:\s*\[(?P<step>\d+)/(?:\d+)\].*?Prec@1\s+(?P<inst>[0-9]*\.?[0-9]+)\s*\((?P<avg>[0-9]*\.?[0-9]+)\)",
+)
+LINE_BOTH_SRC_RE = re.compile(
+    r"validate\s*-\s*Test:\s*\[(?P<step>\d+)/(?:\d+)\].*?"
+    r"Prec@1\s+(?P<inst1>[0-9]*\.?[0-9]+)\s*\((?P<avg1>[0-9]*\.?[0-9]+)\).*?"
+    r"Prec@5\s+(?P<inst5>[0-9]*\.?[0-9]+)\s*\((?P<avg5>[0-9]*\.?[0-9]+)\)"
+)
+
 
 def parse_log(path: str) -> Tuple[Dict[int, Tuple[float, float]], List[int]]:
     """Parse log file and return mapping: step -> (prec1_inst, prec1_avg) and sorted steps list."""
@@ -165,6 +171,8 @@ def parse_log(path: str) -> Tuple[Dict[int, Tuple[float, float]], List[int]]:
         for line in f:
             m = LINE_RE.search(line)
             if not m:
+                m = LINE_SRC_RE.search(line)
+            if not m:
                 continue
             # Use 1-based steps internally so the first record is step=1
             step = int(m.group("step")) + 1
@@ -177,7 +185,8 @@ def parse_log(path: str) -> Tuple[Dict[int, Tuple[float, float]], List[int]]:
 
     steps.sort()
     if not steps:
-        print("Error: No matching 'TTA Epoch1: [...] Prec@1 a (b)' lines found.", file=sys.stderr)
+        print("Error: No matching lines found for either TTA ('TTA Epoch1: [...]') or source-only ('validate - Test: [...]').",
+              file=sys.stderr)
         sys.exit(2)
 
     return step_to_vals, steps
@@ -205,6 +214,8 @@ def parse_log_both(path: str) -> Tuple[
         for line in f:
             m = LINE_BOTH_RE.search(line)
             if not m:
+                m = LINE_BOTH_SRC_RE.search(line)
+            if not m:
                 continue
             step = int(m.group("step")) + 1  # 1-based
             inst1 = float(m.group("inst1"))
@@ -218,7 +229,8 @@ def parse_log_both(path: str) -> Tuple[
 
     steps.sort()
     if not steps:
-        print("Error: No matching 'TTA Epoch1: [...] Prec@1 ... Prec@5 ...' lines found.", file=sys.stderr)
+        print("Error: No matching lines found for either TTA ('TTA Epoch1: [...]') or source-only ('validate - Test: [...]') with Prec@1 and Prec@5.",
+              file=sys.stderr)
         sys.exit(2)
 
     return step_to_p1, step_to_p5, steps

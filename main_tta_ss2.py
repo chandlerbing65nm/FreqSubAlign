@@ -149,24 +149,24 @@ if __name__ == '__main__':
     args.batch_size = 1  # Default to 1 for TTA, can be overridden
 
     # ========================= New Arguments ==========================
-    args.corruption_list = 'continual_alternate' # mini, full, continual, random, continual_alternate
+    args.corruption_list = 'random' # mini, full, continual, random, continual_alternate
     # args.dwt_preprocessing = True
     # args.dwt_component = 'LL'
     # args.dwt_levels = 1
 
-    # # DWT subband alignment hook
-    # args.dwt_align_enable = True
-    # args.dwt_align_levels = 1  # must match the NPZ
+    # DWT subband alignment hook
+    args.dwt_align_enable = True
+    args.dwt_align_adaptive_lambda = True
+    args.dwt_align_levels = 1  # must match the NPZ
 
-    # if not os.path.exists(args.dwt_stats_npz_file):
-    #     if not getattr(args, 'print_val_corrupt_order', False):
-    #         print(f"[WARN] DWT stats NPZ not found: {args.dwt_stats_npz_file}")
+    if not os.path.exists(args.dwt_stats_npz_file):
+        print(f"[WARN] DWT stats NPZ not found: {args.dwt_stats_npz_file}")
 
-    # # Choose alignment weights
-    # args.dwt_align_lambda_ll = 1.0
-    # args.dwt_align_lambda_lh = 1.0
-    # args.dwt_align_lambda_hl = 1.0
-    # args.dwt_align_lambda_hh = 1.0
+    # Choose alignment weights
+    args.dwt_align_lambda_ll = 1.0
+    args.dwt_align_lambda_lh = 1.0
+    args.dwt_align_lambda_hl = 1.0
+    args.dwt_align_lambda_hh = 1.0
 
     # ============================================================================================
 
@@ -182,7 +182,7 @@ if __name__ == '__main__':
     else:
         # Source-only evaluation parameters
         args.evaluate_baselines = True
-        args.baseline = 'tent' # baseline, shot, tent, dua, rem
+        args.baseline = 'source' # source, shot, tent, dua, rem
         
         suffix = f'baseline={args.baseline}'
 
@@ -191,7 +191,9 @@ if __name__ == '__main__':
         suffix += f"_dwt{args.dwt_component}-L{args.dwt_levels}"
     # DWT subband alignment hook settings (for reproducibility)
     if getattr(args, 'dwt_align_enable', False):
-        suffix += f"_dwtAlign-L{getattr(args, 'dwt_align_levels', 1)}"
+        suffix += f"_dwtAlign{'3D' if getattr(args, 'dwt_align_3d', False) else '2D'}-L{getattr(args, 'dwt_align_levels', 1)}"
+        if getattr(args, 'dwt_align_adaptive_lambda', False):
+            suffix += "_adaptive"
         # Compact lambda encoding: include only lambdas > 0 to keep suffix short
         lam_ll = getattr(args, 'dwt_align_lambda_ll', 1.0)
         lam_lh = getattr(args, 'dwt_align_lambda_lh', 1.0)

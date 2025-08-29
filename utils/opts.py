@@ -96,10 +96,14 @@ parser.add_argument('--dwt_component', type=str, default='LL',
 parser.add_argument('--dwt_levels', type=int, default=1,
                     help='Number of DWT decomposition levels (K>=1). Components are selected at the deepest level.')
 # ========================= DWT Subband Alignment (Hook) ==========================
-parser.add_argument('--dwt_align_enable', type=bool, default=False,
+parser.add_argument('--dwt_align_enable', action='store_true',
                     help='Enable DWT subband statistics alignment hook')
+parser.add_argument('--dwt_align_adaptive_lambda', action='store_true', 
+                    help='Scale lambdas by subband energy proportion')
 parser.add_argument('--dwt_align_levels', type=int, default=1,
                     help='DWT decomposition levels for alignment (deepest level used)')
+parser.add_argument('--dwt_align_3d', type=bool, default=False,
+                    help='If True, apply 3D DWT over (T,H,W); otherwise apply 2D DWT over (H,W) per frame')
 parser.add_argument('--dwt_align_lambda_ll', type=float, default=1.0,
                     help='Lambda weight for LL subband alignment')
 parser.add_argument('--dwt_align_lambda_lh', type=float, default=1.0,
@@ -175,63 +179,3 @@ def get_opts():
     args.evaluate_baselines = not args.tta
     args.baseline = 'source'
     return args
-
-
-
-
-
-
-
-
-# parser = argparse.ArgumentParser(description="Implementation of ViTTA")
-# parser.add_argument('--dataset', type=str, default='ucf101', choices=['ucf101', 'somethingv2', 'kinetics'])
-# parser.add_argument('--modality', type=str, default='RGB', choices=['RGB', 'Flow'])
-# parser.add_argument('--root_path', default='None', type=str)
-# parser.add_argument('--train_list', default='None', type=str)
-# parser.add_argument('--val_list', default='None', type=str)
-#
-# # ========================= Model Configs ==========================
-# parser.add_argument('--arch', type=str, default="i3d_resnet50")
-# parser.add_argument('--dropout', '--do', default=0.5, type=float,
-#                     metavar='DO', help='dropout ratio (default: 0.5)')  # used in i3d
-# parser.add_argument('--clip_length', default=64, type=int, metavar='N',
-#                     help='length of sequential frames (default: 64)')
-# parser.add_argument('--input_size', default=224, type=int, metavar='N',
-#                     help='size of input (default: 224)')
-# parser.add_argument('--loss_type', type=str, default="nll",
-#                     choices=['nll'])
-#
-# # ========================= Learning Configs ==========================
-# parser.add_argument('--epochs', default=80, type=int, metavar='N',
-#                     help='number of total epochs to run')
-# parser.add_argument('-b', '--batch-size', default=16, type=int,
-#                     metavar='N', help='mini-batch size (default: 16)')
-# parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
-#                     metavar='LR', help='initial learning rate')
-# parser.add_argument('--lr_steps', default=[30, 60], type=float, nargs="+",
-#                     metavar='LRSteps', help='epochs to decay learning rate by 10')
-# parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
-#                     help='momentum')
-# parser.add_argument('--weight-decay', '--wd', default=5e-4, type=float,
-#                     metavar='W', help='weight decay (default: 5e-4)')
-# parser.add_argument('--clip-gradient', '--gd', default=None, type=float,
-#                     metavar='W', help='gradient norm clipping (default: disabled)')
-#
-# # ========================= Monitor Configs ==========================
-# parser.add_argument('--print-freq', '-p', default=20, type=int,
-#                     metavar='N', help='print frequency (default: 10)')
-# parser.add_argument('--eval-freq', '-ef', default=5, type=int,
-#                     metavar='N', help='evaluation frequency (default: 5)')
-#
-# # ========================= Runtime Configs ==========================
-# parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
-#                     help='number of data loading workers (default: 4)')
-# parser.add_argument('--resume', default='', type=str, metavar='PATH',
-#                     help='path to latest checkpoint (default: none)')
-# parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
-#                     help='evaluate model on validation set')
-# parser.add_argument('--snapshot_pref', type=str, default="")
-# parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
-#                     help='manual epoch number (useful on restarts)')
-# parser.add_argument('--gpus', nargs='+', type=int, default=None)
-# parser.add_argument('--flow_prefix', default="flow_", type=str)

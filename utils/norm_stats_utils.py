@@ -127,6 +127,7 @@ class CombineNormStatsRegHook_DWT():
         before_norm: bool = False,
         if_sample_tta_aug_views: bool = False,
         n_augmented_views: int = 1,
+        dwt_3d: bool = False,
     ):
         self.hook = module.register_forward_hook(self.hook_fn)
         self.clip_len = clip_len
@@ -137,6 +138,7 @@ class CombineNormStatsRegHook_DWT():
         self.before_norm = before_norm
         self.if_sample_tta_aug_views = if_sample_tta_aug_views
         self.n_augmented_views = n_augmented_views
+        self.dwt_3d = bool(dwt_3d)
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -175,6 +177,28 @@ class CombineNormStatsRegHook_DWT():
         return kLL, kLH, kHL, kHH
 
     @staticmethod
+    def _haar_kernels3d(device):
+        """
+        2x2x2 separable 3D Haar filters. Normalize by 2*sqrt(2) for energy preservation.
+        Order: [LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH] over axes (T,H,W).
+        """
+        import math
+        L = torch.tensor([1., 1.], device=device)
+        H = torch.tensor([1., -1.], device=device)
+        denom = 2.0 * math.sqrt(2.0)
+        def outer3(a, b, c):
+            return (a[:, None, None] * b[None, :, None] * c[None, None, :]) / denom
+        kLLL = outer3(L, L, L)
+        kLLH = outer3(L, L, H)
+        kLHL = outer3(L, H, L)
+        kLHH = outer3(L, H, H)
+        kHLL = outer3(H, L, L)
+        kHLH = outer3(H, L, H)
+        kHHL = outer3(H, H, L)
+        kHHH = outer3(H, H, H)
+        return kLLL, kLLH, kLHL, kLHH, kHLL, kHLH, kHHL, kHHH
+
+    @staticmethod
     def _dwt2d_per_frame(x):
         """
         x: (N, C, H, W)
@@ -195,6 +219,39 @@ class CombineNormStatsRegHook_DWT():
         HL = y[:, :, 2]
         HH = y[:, :, 3]
         return LL, LH, HL, HH
+
+    @staticmethod
+    def _dwt3d_multi_level(x, levels: int):
+        """
+        x: (N, C, T, H, W)
+        returns deepest level 3D subbands each (N, C, T/2^L, H/2^L, W/2^L)
+        Subband order and names: LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH
+        """
+        N, C, T, H, W = x.shape
+        cur = x
+        subbands = None
+        for _ in range(levels):
+            device = cur.device
+            kLLL, kLLH, kLHL, kLHH, kHLL, kHLH, kHHL, kHHH = CombineNormStatsRegHook_DWT._haar_kernels3d(device)
+            # Stack kernels -> (8, 2, 2, 2)
+            base = torch.stack([kLLL, kLLH, kLHL, kLHH, kHLL, kHLH, kHHL, kHHH], dim=0)
+            weight = base.unsqueeze(1)  # (8,1,2,2,2)
+            weight = weight.repeat(C, 1, 1, 1, 1)  # (8*C,1,2,2,2)
+            y = F.conv3d(cur, weight, bias=None, stride=2, padding=0, groups=C)  # (N, 8*C, T2, H2, W2)
+            T2, H2, W2 = y.shape[-3], y.shape[-2], y.shape[-1]
+            y = y.view(N, C, 8, T2, H2, W2).contiguous()
+            LLL = y[:, :, 0]
+            LLH = y[:, :, 1]
+            LHL = y[:, :, 2]
+            LHH = y[:, :, 3]
+            HLL = y[:, :, 4]
+            HLH = y[:, :, 5]
+            HHL = y[:, :, 6]
+            HHH = y[:, :, 7]
+            subbands = (LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH)
+            # iterate only on low-low-low for deeper level
+            cur = LLL
+        return subbands
 
     @staticmethod
     def _dwt2d_multi_level(x, levels: int):
@@ -249,18 +306,34 @@ class CombineNormStatsRegHook_DWT():
         else:
             return
 
-        # Apply multi-level DWT
-        LL, LH, HL, HH = self._dwt2d_multi_level(feat, self.dwt_levels)
+        # Apply multi-level DWT (2D or 3D) and compute grouped subband stats
+        if self.dwt_3d:
+            LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH = self._dwt3d_multi_level(feat, self.dwt_levels)
+            grouped = {
+                'LL': [LLL, HLL],
+                'LH': [LLH, HLH],
+                'HL': [LHL, HHL],
+                'HH': [LHH, HHH],
+            }
+        else:
+            LL, LH, HL, HH = self._dwt2d_multi_level(feat, self.dwt_levels)
+            grouped = {
+                'LL': [LL],
+                'LH': [LH],
+                'HL': [HL],
+                'HH': [HH],
+            }
 
-        # Compute per-channel stats for each subband
-        subband_tensors = {'LL': LL, 'LH': LH, 'HL': HL, 'HH': HH}
         for b in self.bands:
             if self.source_mean[b] is None or self.source_var[b] is None:
                 continue
-            sb = subband_tensors[b]
-            # (N,C,T,H,W) -> per-channel mean/var over N,T,H,W
+            # Concatenate along batch dimension to aggregate stats across grouped subbands
+            sb_list = [t for t in grouped[b] if t is not None]
+            if len(sb_list) == 0:
+                continue
+            sb = torch.cat(sb_list, dim=0)
             c = sb.shape[1]
-            mean_c = sb.mean(dim=(0, 2, 3, 4))  # (C,)
+            mean_c = sb.mean(dim=(0, 2, 3, 4))
             var_c = sb.permute(1, 0, 2, 3, 4).contiguous().view(c, -1).var(1, unbiased=False)
             if self.moving_avg:
                 self.mean_m[b].update(mean_c)
@@ -273,7 +346,6 @@ class CombineNormStatsRegHook_DWT():
                 reg_b = compute_regularization(
                     self.source_mean[b], self.mean_m[b].avg, self.source_var[b], self.var_m[b].avg, self.reg_type
                 )
-                # accumulate weighted total and store per-band (weighted) contributions for logging
                 self.r_feature = self.r_feature + lam * reg_b
                 self.r_feature_bands[b] = lam * reg_b
 

@@ -324,6 +324,16 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                                                 'HH': getattr(args, 'dwt_align_lambda_hh', 0.0),
                                             }
                                             band_lambdas = {b: lam for b, lam in base_lambdas.items() if b in clean_band_stats and lam > 0}
+                                            
+                                            if getattr(args, 'dwt_align_adaptive_lambda', False):
+                                                # Compute energy proportions
+                                                total_energy = sum(torch.from_numpy(stats[0]).pow(2).sum() + torch.from_numpy(stats[1]).sum() 
+                                                                 for stats in clean_band_stats.values())
+                                                for band in band_lambdas:
+                                                    band_stats = clean_band_stats[band]
+                                                    band_energy = torch.from_numpy(band_stats[0]).pow(2).sum() + torch.from_numpy(band_stats[1]).sum()
+                                                    band_lambdas[band] *= (band_energy / total_energy).item()
+                                            
                                             if len(band_lambdas) > 0:
                                                 stat_reg_hooks.append(
                                                     CombineNormStatsRegHook_DWT(
@@ -338,6 +348,7 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                                                         before_norm=args.before_norm,
                                                         if_sample_tta_aug_views=args.if_sample_tta_aug_views,
                                                         n_augmented_views=args.n_augmented_views,
+                                                        dwt_3d=getattr(args, 'dwt_align_3d', False),
                                                     )
                                                 )
                                                 hooks_for_this_layer += 1
