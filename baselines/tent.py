@@ -15,11 +15,14 @@ def forward_and_adapt(x, model, optimizer, args=None, actual_bz=None, n_clips=No
     Measure entropy of the model prediction, take gradients, and update params.
     """
     # forward
-    outputs = model(x) # (batch * n_views, 3, T, 224,224 )  -> (batch * n_views, n_class ) todo clip-level prediction
+    raw_outputs = model(x) 
+
     if args.arch == 'tanet':
-        outputs = outputs.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
-    # adapt
-    loss = softmax_entropy(outputs).mean(0)   #   todo compute the entropy for all clip-level predictions   then take the averaga among all samples
+        outputs = raw_outputs.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
+    elif args.arch == 'videoswintransformer':
+        outputs, _ = raw_outputs
+
+    loss = softmax_entropy(outputs).mean(0)   
     loss.backward()
     optimizer.step()
     optimizer.zero_grad()
@@ -40,6 +43,11 @@ def collect_params(model):
         if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
             for np, p in m.named_parameters():
                 if np in ['weight', 'bias']:  # weight is scale gamma, bias is shift beta
+                    params.append(p)
+                    names.append(f"{nm}.{np}")
+        elif isinstance(m, torch.nn.LayerNorm):
+            for np, p in m.named_parameters():
+                if np in ['weight', 'bias']:  
                     params.append(p)
                     names.append(f"{nm}.{np}")
     return params, names
@@ -65,9 +73,8 @@ def configure_model(model):
     for m in model.modules():
         if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
             m.requires_grad_(True)
-        #m.track_running_stats = True # for original implementation this is False
-        #m.running_mean = None # for original implementation uncomment this
-        #m.running_var = None # for original implementation uncomment this
+        elif isinstance(m, torch.nn.LayerNorm):
+            m.requires_grad_(True)
     return model
 
 

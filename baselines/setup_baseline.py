@@ -68,8 +68,8 @@ def setup_rem(args, model, logger):
 def setup_source(args, model, logger):
     """Set up the baseline source model without adaptation."""
     model.eval()
-    # if args.verbose:
-    #     logger.info(f"model for adaptation: %s", model)
+    if args.verbose:
+        logger.info(f"model for adaptation: %s", model)
     return model
 
 

@@ -116,6 +116,7 @@ def validate(val_loader, model, criterion, iter, epoch=None, args=None, logger=N
     if args.evaluate_baselines:
         if args.baseline == 'source':
             logger.debug(f'Starting ---- {args.corruptions} ---- evaluation for Source...')
+
         elif args.baseline == 'tent':
             from baselines.tent import forward_and_adapt, softmax_entropy
             logger.debug(f'Starting ---- {args.corruptions} ---- adaptation for TENT...')
@@ -128,12 +129,16 @@ def validate(val_loader, model, criterion, iter, epoch=None, args=None, logger=N
                     input = input.view(actual_bz * args.test_crops * n_clips,
                                        args.clip_length, 3, input.size(2), input.size(3))
                     _ = forward_and_adapt(input, model, optimizer, args, actual_bz, n_clips)
+                elif args.arch == 'videoswintransformer':
+                    _ = forward_and_adapt(input, model, optimizer, args, actual_bz, n_clips)
+                    pass
                 else:
                     # e.g., Video Swin Transformer: adapt on flattened views, report per-video accuracy
                     n_views = args.test_crops * n_clips
                     input = input.reshape((-1,) + input.shape[2:])
                     _ = forward_and_adapt(input, model, optimizer)
             logger.debug(f'TENT Adaptation Finished --- Now Evaluating')
+
         elif args.baseline == 'rem':
             from baselines.rem import forward_and_adapt as rem_forward_and_adapt
             from baselines.tent import softmax_entropy  # kept for potential debugging
@@ -147,6 +152,9 @@ def validate(val_loader, model, criterion, iter, epoch=None, args=None, logger=N
                     input = input.view(actual_bz * args.test_crops * n_clips,
                                        args.clip_length, 3, input.size(2), input.size(3))
                     _ = rem_forward_and_adapt(input, model, optimizer, args, actual_bz, n_clips)
+                elif args.arch == 'videoswintransformer':
+                    _ = rem_forward_and_adapt(input, model, optimizer, args, actual_bz, n_clips)
+                    pass
                 else:
                     # e.g., Video Swin Transformer: adapt on flattened views, report per-video accuracy
                     n_views = args.test_crops * n_clips
@@ -192,11 +200,14 @@ def validate(val_loader, model, criterion, iter, epoch=None, args=None, logger=N
             elif args.arch == 'videoswintransformer':
                 # the format shape is N C T H W
                 # (actual_bz,   C* spatial_crops * temporal_clips* clip_len,    256,     256)   -> (batch, n_views, C, T, H, W)
-                n_views = args.test_crops * n_clips
                 # input = input.view(-1, n_views, 3, args.clip_length, input.size(3), input.size(4))
-                output, _ = model(  input)  # (batch, n_views, C, T, H, W) ->  (batch, n_class), todo outputs are unnormalized scores
-
-
+                n_views = args.test_crops * n_clips
+                if args.baseline == 'shot':
+                    input = input.view(-1, *input.shape[2:])
+                    output = model(input)
+                    output = output.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
+                else:
+                    output, _ = model(  input)  # (batch, n_views, C, T, H, W) ->  (batch, n_class), todo outputs are unnormalized scores
 
             else:
                 input = input.reshape( (-1,) + input.shape[2:])  # (batch, n_views, 3, T, 224,224 ) -> (batch * n_views, 3, T, 224,224 )

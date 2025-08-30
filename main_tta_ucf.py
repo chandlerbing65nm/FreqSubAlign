@@ -118,7 +118,7 @@ if __name__ == '__main__':
     dataset_dir = dataset_to_dir.get(args.dataset, args.dataset)
 
     # Choose evaluation mode (TTA or source-only)
-    args.tta = True  # Set to False for source-only evaluation
+    args.tta = False  # Set to False for source-only evaluation
     
     # Get model configuration based on architecture and dataset
     model_config = get_model_config(args.arch, args.dataset, tta_mode=args.tta)
@@ -148,26 +148,27 @@ if __name__ == '__main__':
     args.batch_size = 1
     args.n_epoch_adapat = 1
 
+    # args.tsn_style = True
     # ========================= New Arguments ==========================
     args.corruption_list = 'random' # mini, full, continual, random, continual_alternate
     # args.dwt_preprocessing = True
     # args.dwt_component = 'LL'
     # args.dwt_levels = 1
 
-    # DWT subband alignment hook
-    args.dwt_align_enable = True
-    args.dwt_align_adaptive_lambda = True
-    # args.dwt_align_3d = True
-    args.dwt_align_levels = 1  # must match the NPZ, up to 2 only
+    # # DWT subband alignment hook
+    # args.dwt_align_enable = True
+    # args.dwt_align_adaptive_lambda = True
+    # # args.dwt_align_3d = True
+    # args.dwt_align_levels = 1  # must match the NPZ, up to 2 only
 
-    if not os.path.exists(args.dwt_stats_npz_file):
-        print(f"[WARN] DWT stats NPZ not found: {args.dwt_stats_npz_file}")
+    # if not os.path.exists(args.dwt_stats_npz_file):
+    #     print(f"[WARN] DWT stats NPZ not found: {args.dwt_stats_npz_file}")
 
-    # Choose alignment weights
-    args.dwt_align_lambda_ll = 1.0
-    args.dwt_align_lambda_lh = 1.0
-    args.dwt_align_lambda_hl = 1.0
-    args.dwt_align_lambda_hh = 1.0
+    # # Choose alignment weights
+    # args.dwt_align_lambda_ll = 1.0
+    # args.dwt_align_lambda_lh = 1.0
+    # args.dwt_align_lambda_hl = 1.0
+    # args.dwt_align_lambda_hh = 1.0
 
     if args.dwt_align_3d == True and args.arch == 'tanet':
         args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt/dwt_subband_stats_L1_20250828_171707.npz'
@@ -188,8 +189,9 @@ if __name__ == '__main__':
         suffix += f"_views{args.n_augmented_views}"
     else:
         # Source-only evaluation parameters
+        args.test_crops = 1
         args.evaluate_baselines = True
-        args.baseline = 'source' # source, shot, tent, dua, rem
+        args.baseline = 'shot' # source, shot, tent, dua, rem, t3a, norm
         
         suffix = f'baseline={args.baseline}'
 
@@ -222,9 +224,10 @@ if __name__ == '__main__':
     # Set up corruption types to evaluate
     if getattr(args, 'corruption_list', 'full') == 'mini':
         corruptions = [
-            'gauss_mini', 'pepper_mini', 'salt_mini','shot_mini',
-            'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
-            'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
+            'gauss_mini', 
+            # 'pepper_mini', 'salt_mini','shot_mini',
+            # 'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
+            # 'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
         ]
     elif getattr(args, 'corruption_list', 'full') == 'full':
         corruptions = [

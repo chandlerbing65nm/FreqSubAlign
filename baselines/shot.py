@@ -19,7 +19,7 @@ parser.add_argument('--corruption', default='')
 parser.add_argument('--resume', default=None, help='directory of pretrained model')
 parser.add_argument('--ckpt', default=None, type=int)
 parser.add_argument('--fix_ssh', action='store_true')
-parser.add_argument('--batch_size', default=12, type=int)
+parser.add_argument('--batch_size', default=1, type=int)
 ########################################################################
 parser.add_argument('--method', default='shot', choices=['shot'])
 ########################################################################
@@ -47,10 +47,18 @@ def configure_shot(net, logger, args):
 
         for k, v in classifier.named_parameters():
             v.requires_grad = False
+    elif args.arch == 'videoswintransformer':
+        # For Video Swin Transformer, use backbone for feature extraction
+        for k, v in net.named_parameters():
+            if 'head' in k or 'cls_head' in k:
+                v.requires_grad = False
+        classifier = net.module.head if hasattr(net.module, 'head') else net.module.cls_head
+        ext = net.module.backbone  # Use backbone directly for feature extraction
+        # No need to set head to identity since we're using backbone directly
     else:
         for k, v in net.named_parameters():
             if 'logits' in k:
-                v.requires_grad = False  # freeze the  classifier
+                v.requires_grad = False  # freeze the classifier
         classifier = nn.Sequential(*list(net.module.logits.children()))
         ext = list(net.module.children())[3:] + list(net.module.children())[:2]
         ext = nn.Sequential(*ext)
@@ -65,6 +73,8 @@ def train(args, criterion, optimizer, classifier, ext, teloader, logger):
     shot_acc = list()
     if args.arch == 'tanet':
         n_clips = int(args.sample_style.split("-")[-1])
+    else:
+        n_clips = 1  # Default value for non-TANet architectures
 
     for epoch in range(1, args_shot.nepoch + 1):
         ext.eval()
@@ -91,6 +101,18 @@ def train(args, criterion, optimizer, classifier, ext, teloader, logger):
                 outputs_test = torch.squeeze(outputs_test)
                 outputs_test = outputs_test.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
 
+            elif args.arch == 'videoswintransformer':
+                classifier_loss = 0
+                # Video Swin Transformer input processing similar to TENT
+                actual_bz = inputs.shape[0]
+                inputs = inputs.view(-1, *inputs.shape[2:])
+                features_test = ext(inputs.cuda())
+                outputs_test = classifier(features_test)
+                outputs_test = outputs_test[0]  # Extract logits from tuple
+                outputs_test = torch.squeeze(outputs_test)
+                # Average outputs over views
+                outputs_test = outputs_test.reshape(actual_bz, args.test_crops * n_clips, -1)
+                outputs_test = outputs_test.mean(1)  # Average over views dimension
             else:
                 classifier_loss = 0
                 inputs = inputs.reshape(
@@ -128,6 +150,19 @@ def train(args, criterion, optimizer, classifier, ext, teloader, logger):
             top_1_acc = validate(teloader, ext, criterion, 0, epoch=epoch, args=args, logger=logger)
             shot_acc.append(top_1_acc)
             ext.module.new_fc = nn.Identity()
+        elif args.arch == 'videoswintransformer':
+            # For Video Swin Transformer, reconstruct the full model
+            if hasattr(ext, 'head'):
+                ext.head = classifier
+            else:
+                ext.cls_head = classifier
+            top_1_acc = validate(teloader, ext, criterion, 0, epoch=epoch, args=args, logger=logger)
+            shot_acc.append(top_1_acc)
+            # # Reset to identity for next training iteration
+            # if hasattr(ext, 'head'):
+            #     ext.head = nn.Identity()
+            # else:
+            #     ext.cls_head = nn.Identity()
         else:
             adapted_model = nn.Sequential(*(list(ext.children()) + list(classifier.children())))
             adapted_model = adapted_model.cuda()

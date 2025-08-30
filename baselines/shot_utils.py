@@ -20,6 +20,16 @@ def obtain_shot_label(loader, ext, task_head, args, n_clips=None, c=None):
                 outputs = task_head(feas)
                 outputs = torch.squeeze(outputs)
                 outputs = outputs.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
+            elif args.arch == 'videoswintransformer':
+                actual_bz = inputs.shape[0]
+                inputs = inputs.view(-1, *inputs.shape[2:])  # Merge batch and view dimensions
+                feas = ext(inputs)  # Features from backbone
+                # Pass features through classifier head
+                outputs = task_head(feas)
+                outputs = torch.squeeze(outputs)
+                # Average outputs over views
+                outputs = outputs.reshape(actual_bz, args.test_crops * n_clips, -1)
+                outputs = outputs.mean(1)  # Average over views dimension
             else:
                 inputs = inputs.reshape(
                     (-1,) + inputs.shape[2:])
@@ -41,10 +51,10 @@ def obtain_shot_label(loader, ext, task_head, args, n_clips=None, c=None):
     _, predict = torch.max(all_output, 1)
 
     accuracy = torch.sum(torch.squeeze(predict).float() == all_label).item() / float(all_label.size()[0])
-    a = torch.ones(all_fea.size(0), 1)
-    all_fea = torch.squeeze(all_fea)
-    all_fea = torch.cat((all_fea, torch.ones(all_fea.size(0), 1)), 1)  #   (bz, 1024 + 1) add one more dimension of  ones
-    all_fea = (all_fea.t() / torch.norm(all_fea, p=2, dim=1)).t()   # (bz, 1025), normalize along feature dimension
+    # Flatten features to 2D before concatenation
+    all_fea = all_fea.reshape(all_fea.size(0), -1)  # Flatten to (batch_size, features)
+    all_fea = torch.cat((all_fea, torch.ones(all_fea.size(0), 1)), 1)  #   (bz, features + 1)
+    all_fea = (all_fea.t() / torch.norm(all_fea, p=2, dim=1)).t()   # (bz, features+1), normalize
     all_fea = all_fea.float().cpu().numpy()
 
     K = all_output.size(1)

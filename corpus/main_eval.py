@@ -152,10 +152,14 @@ def eval(args=None, model = None ):
             epoch_result_list = [top1_acc]
 
         elif args.baseline == 'tent':
-
             if args.arch == 'tanet':
                 val_loader = torch.utils.data.DataLoader(
                     get_dataset_tanet(args,  split='val'),
+                    batch_size=args.batch_size, shuffle=False,
+                    num_workers=args.workers, pin_memory=True, )
+            elif args.arch == 'videoswintransformer':
+                val_loader = torch.utils.data.DataLoader(
+                    get_dataset_videoswin(args, split='val', dataset_type='eval'),
                     batch_size=args.batch_size, shuffle=False,
                     num_workers=args.workers, pin_memory=True, )
             else:
@@ -175,6 +179,11 @@ def eval(args=None, model = None ):
                     get_dataset_tanet(args,  split='val'),
                     batch_size=args.batch_size, shuffle=False,
                     num_workers=args.workers, pin_memory=True, )
+            elif args.arch == 'videoswintransformer':
+                val_loader = torch.utils.data.DataLoader(
+                    get_dataset_videoswin(args, split='val', dataset_type='eval'),
+                    batch_size=args.batch_size, shuffle=False,
+                    num_workers=args.workers, pin_memory=True, )
             else:
                 val_loader = torch.utils.data.DataLoader(
                     get_dataset(args, split='val'),
@@ -189,6 +198,11 @@ def eval(args=None, model = None ):
             if args.arch == 'tanet':
                 val_loader = torch.utils.data.DataLoader(
                     get_dataset_tanet(args, split='val'),
+                    batch_size=args.batch_size, shuffle=False,
+                    num_workers=args.workers, pin_memory=True, )
+            elif args.arch == 'videoswintransformer':
+                val_loader = torch.utils.data.DataLoader(
+                    get_dataset_videoswin(args, split='val', dataset_type='eval'),
                     batch_size=args.batch_size, shuffle=False,
                     num_workers=args.workers, pin_memory=True, )
             else:
@@ -238,6 +252,11 @@ def eval(args=None, model = None ):
             if args.arch == 'tanet':
                 val_loader = torch.utils.data.DataLoader(
                     get_dataset_tanet(args,  split='val'),
+                    batch_size=args.batch_size, shuffle=False,
+                    num_workers=args.workers, pin_memory=True, )
+            elif args.arch == 'videoswintransformer':
+                val_loader = torch.utils.data.DataLoader(
+                    get_dataset_videoswin(args, split='val', dataset_type='eval'),
                     batch_size=args.batch_size, shuffle=False,
                     num_workers=args.workers, pin_memory=True, )
             else:
