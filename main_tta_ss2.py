@@ -107,8 +107,8 @@ if __name__ == '__main__':
     set_seed(142)
     
     # Choose model architecture and dataset
-    args.arch = 'videoswintransformer'  # videoswintransformer, tanet
-    args.dataset = 'somethingv2'  # somethingv2, ucf101, uffia
+    args.arch = 'tanet'  # videoswintransformer, tanet
+    args.dataset = 'somethingv2'
 
     # Map dataset names to directory names
     dataset_to_dir = {
@@ -181,6 +181,7 @@ if __name__ == '__main__':
         suffix += f"_views{args.n_augmented_views}"
     else:
         # Source-only evaluation parameters
+        # args.test_crops = 1
         args.evaluate_baselines = True
         args.baseline = 'shot' # source, shot, tent, dua, rem, norm
         
@@ -215,9 +216,10 @@ if __name__ == '__main__':
     # Set up corruption types to evaluate
     if getattr(args, 'corruption_list', 'full') == 'mini':
         corruptions = [
-            'gauss_mini', 'pepper_mini', 'salt_mini','shot_mini',
-            'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
-            'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
+            'gauss_mini', 
+            # 'pepper_mini', 'salt_mini','shot_mini',
+            # 'zoom_mini', 'impulse_mini', 'defocus_mini', 'motion_mini',
+            # 'jpeg_mini', 'contrast_mini', 'rain_mini', 'h265_abr_mini',
         ]
     elif getattr(args, 'corruption_list', 'full') == 'full':
         corruptions = [

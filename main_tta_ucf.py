@@ -106,8 +106,8 @@ if __name__ == '__main__':
     set_seed(142)
     
     # Choose model architecture and dataset
-    args.arch = 'videoswintransformer'  # videoswintransformer, tanet
-    args.dataset = 'ucf101'  # somethingv2, ucf101, uffia
+    args.arch = 'tanet'  # videoswintransformer, tanet
+    args.dataset = 'ucf101'
 
     # Map dataset names to directory names
     dataset_to_dir = {
@@ -150,7 +150,7 @@ if __name__ == '__main__':
 
     # args.tsn_style = True
     # ========================= New Arguments ==========================
-    args.corruption_list = 'random' # mini, full, continual, random, continual_alternate
+    args.corruption_list = 'continual' # mini, full, continual, random, continual_alternate
     # args.dwt_preprocessing = True
     # args.dwt_component = 'LL'
     # args.dwt_levels = 1
@@ -189,9 +189,9 @@ if __name__ == '__main__':
         suffix += f"_views{args.n_augmented_views}"
     else:
         # Source-only evaluation parameters
-        args.test_crops = 1
+        # args.test_crops = 1
         args.evaluate_baselines = True
-        args.baseline = 'shot' # source, shot, tent, dua, rem, t3a, norm
+        args.baseline = 'norm' # source, shot, tent, dua, rem, t3a, norm
         
         suffix = f'baseline={args.baseline}'
 

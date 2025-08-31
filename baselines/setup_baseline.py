@@ -59,7 +59,7 @@ def setup_rem(args, model, logger):
     params, param_names = rem.collect_params(model)
     optimizer = optim.SGD(params, lr=1e-3)
     if args.verbose:
-        logger.debug(f"model for adaptation: %s", model)
+        # logger.debug(f"model for adaptation: %s", model)
         logger.debug(f"params for adaptation: %s", param_names)
         logger.debug(f"optimizer for adaptation: %s", optimizer)
     return model, optimizer
@@ -68,8 +68,8 @@ def setup_rem(args, model, logger):
 def setup_source(args, model, logger):
     """Set up the baseline source model without adaptation."""
     model.eval()
-    if args.verbose:
-        logger.info(f"model for adaptation: %s", model)
+    # if args.verbose:
+    #     logger.info(f"model for adaptation: %s", model)
     return model
 
 
@@ -79,8 +79,8 @@ def setup_dua(args, model, logger):
     Do not reset stats. Freeze entire model except the Batch Normalization layer.
     """
     dua_model = dua.DUA(model)
-    if args.verbose:
-        logger.info(f"model for adaptation: %s", model)
+    # if args.verbose:
+    #     logger.info(f"model for adaptation: %s", model)
     return dua_model
 
 
@@ -90,8 +90,8 @@ def setup_shot(args, model, logger):
     Adapts the feature extractor by keeping source predictions as hypothesis and entropy minimization.
     """
     optimizer, classifier, ext = shot.configure_shot(model, logger, args)
-    if args.verbose:
-        logger.info(f"model for adaptation: %s", model)
+    # if args.verbose:
+    #     logger.info(f"model for adaptation: %s", model)
     return optimizer, classifier, ext
 
 
@@ -105,7 +105,7 @@ def setup_norm(args, model, logger):
     norm_model = norm.Norm(model)
     stats, stat_names = norm.collect_stats(model)
     if args.verbose:
-        logger.info(f"model for adaptation: %s", model)
+        # logger.info(f"model for adaptation: %s", model)
         logger.debug(f"stats for adaptation: %s", stat_names)
     return norm_model
 
@@ -121,7 +121,7 @@ def setup_tent(args, model, logger):
     params, param_names = tent.collect_params(model)  # collecting gamma and beta in all Batchnorm3d layers
     optimizer = setup_optimizer(params)  # todo hyperparameters are hard-coded above
     if args.verbose:
-        logger.debug(f"model for adaptation: %s", model)
+        # logger.debug(f"model for adaptation: %s", model)
         logger.debug(f"params for adaptation: %s", param_names)
         logger.debug(f"optimizer for adaptation: %s", optimizer)
     return model, optimizer

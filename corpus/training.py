@@ -172,6 +172,9 @@ def validate(val_loader, model, criterion, iter, epoch=None, args=None, logger=N
                         input = input.view(actual_bz * args.test_crops * n_clips,
                                            args.clip_length, 3, input.size(2), input.size(3))
                         _ = model(input)
+                    elif args.arch == 'videoswintransformer':
+                        _ = model(input)
+                        pass
                     else:
                         input = input.reshape((-1,) + input.shape[2:])
                         _ = model(input)
@@ -203,12 +206,14 @@ def validate(val_loader, model, criterion, iter, epoch=None, args=None, logger=N
                 # input = input.view(-1, n_views, 3, args.clip_length, input.size(3), input.size(4))
                 n_views = args.test_crops * n_clips
                 if args.baseline == 'shot':
-                    input = input.view(-1, *input.shape[2:])
+                    n_views = input.shape[1]
+                    input = input.reshape((-1,) + input.shape[2:])
+                    # input = input.view(-1, *input.shape[2:])
                     output = model(input)
-                    output = output.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
+                    output = torch.squeeze(output)
+                    output = output.reshape(actual_bz // n_views, n_views, -1).mean(1)
                 else:
-                    output, _ = model(  input)  # (batch, n_views, C, T, H, W) ->  (batch, n_class), todo outputs are unnormalized scores
-
+                    output, _ = model(input)  # (batch, n_views, C, T, H, W) ->  (batch, n_class), todo outputs are unnormalized scores
             else:
                 input = input.reshape( (-1,) + input.shape[2:])  # (batch, n_views, 3, T, 224,224 ) -> (batch * n_views, 3, T, 224,224 )
                 output = model( input)  # (batch * n_views, 3, T, 224,224 ) ->  (batch * n_views,  n_class)  todo  reshape clip prediction into video prediction

@@ -4,7 +4,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --ntasks-per-node=1
-#SBATCH --mem-per-cpu=4G
+#SBATCH --mem-per-cpu=8G
 #SBATCH --gpus-per-node=1
 #SBATCH --nodes=1
 #SBATCH --partition=small-g
@@ -20,4 +20,4 @@ conda activate ttadapt
 cd /users/doloriel/work/Repo/SWaveletA
 
 # Run the Python script
-python -m main_tta_ucf
+python -m main_tta_ss2

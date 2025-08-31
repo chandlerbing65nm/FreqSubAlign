@@ -3,6 +3,7 @@ import torch.optim as optim
 import argparse
 from utils import utils_ as utils
 from corpus.main_train import validate
+import torch.nn.functional as F
 
 parser = argparse.ArgumentParser()
 
@@ -48,12 +49,15 @@ def configure_shot(net, logger, args):
         for k, v in classifier.named_parameters():
             v.requires_grad = False
     elif args.arch == 'videoswintransformer':
-        # For Video Swin Transformer, use backbone for feature extraction
-        for k, v in net.named_parameters():
-            if 'head' in k or 'cls_head' in k:
-                v.requires_grad = False
-        classifier = net.module.head if hasattr(net.module, 'head') else net.module.cls_head
+        classifier = net.module.cls_head
         ext = net.module.backbone  # Use backbone directly for feature extraction
+        ext.cls_head = nn.Identity()
+
+        for k, v in classifier.named_parameters():
+            if 'cls_head' in k:
+                v.requires_grad = False  # freeze the classifier
+        for k, v in ext.named_parameters():
+            v.requires_grad = True
         # No need to set head to identity since we're using backbone directly
     else:
         for k, v in net.named_parameters():
@@ -95,23 +99,22 @@ def train(args, criterion, optimizer, classifier, ext, teloader, logger):
                 inputs = inputs.view(actual_bz * args.test_crops * n_clips,
                                      args.clip_length, 3, inputs.size(2), inputs.size(3))
                 features_test = ext(inputs.cuda())
-
                 outputs_test = classifier(features_test)
-
                 outputs_test = torch.squeeze(outputs_test)
                 outputs_test = outputs_test.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
-
             elif args.arch == 'videoswintransformer':
                 classifier_loss = 0
                 # Video Swin Transformer input processing similar to TENT
                 actual_bz = inputs.shape[0]
-                inputs = inputs.view(-1, *inputs.shape[2:])
+                n_views = inputs.shape[1]
+                inputs = inputs.reshape((-1,) + inputs.shape[2:])
+                # inputs = inputs.view(-1, *inputs.shape[2:])
                 features_test = ext(inputs.cuda())
                 outputs_test = classifier(features_test)
                 outputs_test = outputs_test[0]  # Extract logits from tuple
                 outputs_test = torch.squeeze(outputs_test)
                 # Average outputs over views
-                outputs_test = outputs_test.reshape(actual_bz, args.test_crops * n_clips, -1)
+                outputs_test = outputs_test.view(actual_bz // n_views, n_views, -1)
                 outputs_test = outputs_test.mean(1)  # Average over views dimension
             else:
                 classifier_loss = 0
@@ -121,10 +124,9 @@ def train(args, criterion, optimizer, classifier, ext, teloader, logger):
                 outputs_test = classifier(features_test)
                 outputs_test = torch.squeeze(outputs_test)
 
-            if args_shot.cls_par > 0:
+            if args_shot.cls_par > 0 and args.arch == 'tanet':
                 pred = mem_label[batch_idx * args_shot.batch_size:(batch_idx + 1) * args_shot.batch_size]
-                classifier_loss = args_shot.cls_par * nn.CrossEntropyLoss()(outputs_test,
-                                                                            pred)  # CE loss using the pseudo labels
+                classifier_loss = args_shot.cls_par * nn.CrossEntropyLoss()(outputs_test, pred)  # CE loss using the pseudo labels
             else:
                 classifier_loss = torch.tensor(0.0).cuda()
 
@@ -141,9 +143,9 @@ def train(args, criterion, optimizer, classifier, ext, teloader, logger):
             classifier_loss.backward()
             optimizer.step()
             losses.update(classifier_loss.item(), labels.size(0))
-            if args.verbose:
-                logger.debug(('SHOT Training: [{0}/{1}]\t'
-                              'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(batch_idx, len(teloader), loss=losses)))
+            # if args.verbose:
+            #     logger.debug(('SHOT Training: [{0}/{1}]\t'
+            #                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(batch_idx, len(teloader), loss=losses)))
 
         if args.arch == 'tanet':
             ext.module.new_fc = classifier # simply put the classifier back in place of nn.Identity()
@@ -152,17 +154,10 @@ def train(args, criterion, optimizer, classifier, ext, teloader, logger):
             ext.module.new_fc = nn.Identity()
         elif args.arch == 'videoswintransformer':
             # For Video Swin Transformer, reconstruct the full model
-            if hasattr(ext, 'head'):
-                ext.head = classifier
-            else:
-                ext.cls_head = classifier
+            ext.cls_head = classifier
             top_1_acc = validate(teloader, ext, criterion, 0, epoch=epoch, args=args, logger=logger)
             shot_acc.append(top_1_acc)
-            # # Reset to identity for next training iteration
-            # if hasattr(ext, 'head'):
-            #     ext.head = nn.Identity()
-            # else:
-            #     ext.cls_head = nn.Identity()
+            ext.cls_head = nn.Identity()
         else:
             adapted_model = nn.Sequential(*(list(ext.children()) + list(classifier.children())))
             adapted_model = adapted_model.cuda()

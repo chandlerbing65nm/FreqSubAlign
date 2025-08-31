@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from scipy.spatial.distance import cdist
 import numpy as np
+import torch.nn.functional as F
 
 
 def obtain_shot_label(loader, ext, task_head, args, n_clips=None, c=None):
@@ -20,15 +21,18 @@ def obtain_shot_label(loader, ext, task_head, args, n_clips=None, c=None):
                 outputs = task_head(feas)
                 outputs = torch.squeeze(outputs)
                 outputs = outputs.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
+                feas = feas.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
             elif args.arch == 'videoswintransformer':
                 actual_bz = inputs.shape[0]
-                inputs = inputs.view(-1, *inputs.shape[2:])  # Merge batch and view dimensions
+                n_views = inputs.shape[1]
+                inputs = inputs.reshape((-1,) + inputs.shape[2:])
+                # inputs = inputs.view(-1, *inputs.shape[2:])  # Merge batch and view dimensions
                 feas = ext(inputs)  # Features from backbone
                 # Pass features through classifier head
                 outputs = task_head(feas)
                 outputs = torch.squeeze(outputs)
                 # Average outputs over views
-                outputs = outputs.reshape(actual_bz, args.test_crops * n_clips, -1)
+                outputs = outputs.view(actual_bz // n_views, n_views, -1)
                 outputs = outputs.mean(1)  # Average over views dimension
             else:
                 inputs = inputs.reshape(
@@ -48,6 +52,7 @@ def obtain_shot_label(loader, ext, task_head, args, n_clips=None, c=None):
                 all_label = torch.cat((all_label, labels.float()), 0)
 
     all_output = nn.Softmax(dim=1)(all_output)
+
     _, predict = torch.max(all_output, 1)
 
     accuracy = torch.sum(torch.squeeze(predict).float() == all_label).item() / float(all_label.size()[0])
