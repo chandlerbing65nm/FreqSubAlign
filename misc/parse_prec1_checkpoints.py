@@ -157,6 +157,16 @@ LINE_BOTH_SRC_RE = re.compile(
     r"Prec@5\s+(?P<inst5>[0-9]*\.?[0-9]+)\s*\((?P<avg5>[0-9]*\.?[0-9]+)\)"
 )
 
+# New regex for the provided log format
+LINE_VALIDATE_BRIEF_RE = re.compile(
+    r"validate_brief\s*-\s*Test Epoch \d+:\s*\[(?P<step>\d+)/(?:\d+)\].*?Prec@1\s+(?P<inst>[0-9]*\.?[0-9]+)\s*\((?P<avg>[0-9]*\.?[0-9]+)\)",
+)
+LINE_BOTH_VALIDATE_BRIEF_RE = re.compile(
+    r"validate_brief\s*-\s*Test Epoch \d+:\s*\[(?P<step>\d+)/(?:\d+)\].*?"
+    r"Prec@1\s+(?P<inst1>[0-9]*\.?[0-9]+)\s*\((?P<avg1>[0-9]*\.?[0-9]+)\).*?"
+    r"Prec@5\s+(?P<inst5>[0-9]*\.?[0-9]+)\s*\((?P<avg5>[0-9]*\.?[0-9]+)\)"
+)
+
 
 def parse_log(path: str) -> Tuple[Dict[int, Tuple[float, float]], List[int]]:
     """Parse log file and return mapping: step -> (prec1_inst, prec1_avg) and sorted steps list."""
@@ -172,6 +182,8 @@ def parse_log(path: str) -> Tuple[Dict[int, Tuple[float, float]], List[int]]:
             m = LINE_RE.search(line)
             if not m:
                 m = LINE_SRC_RE.search(line)
+            if not m:
+                m = LINE_VALIDATE_BRIEF_RE.search(line)  # Add new format check
             if not m:
                 continue
             # Use 1-based steps internally so the first record is step=1
@@ -215,6 +227,8 @@ def parse_log_both(path: str) -> Tuple[
             m = LINE_BOTH_RE.search(line)
             if not m:
                 m = LINE_BOTH_SRC_RE.search(line)
+            if not m:
+                m = LINE_BOTH_VALIDATE_BRIEF_RE.search(line)  # Add new format check
             if not m:
                 continue
             step = int(m.group("step")) + 1  # 1-based
