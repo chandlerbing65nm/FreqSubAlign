@@ -350,6 +350,7 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                                                         n_augmented_views=args.n_augmented_views,
                                                         dwt_3d=getattr(args, 'dwt_align_3d', False),
                                                         subband_transform=getattr(args, 'subband_transform', 'dwt'),
+                                                        wavelet=getattr(args, 'dwt_wavelet', 'haar'),
                                                     )
                                                 )
                                                 hooks_for_this_layer += 1

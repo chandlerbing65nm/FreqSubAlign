@@ -150,14 +150,15 @@ if __name__ == '__main__':
 
     # args.tsn_style = True
     # ========================= New Arguments ==========================
-    args.corruption_list = 'continual' # mini, full, continual, random, continual_alternate
+    args.corruption_list = 'random' # mini, full, continual, random, continual_alternate
 
     # DWT/FFT/DCT subband alignment hook
     args.dwt_align_enable = True
     # args.dwt_align_adaptive_lambda = True
     # args.dwt_align_3d = True
     args.dwt_align_levels = 1  # must match the NPZ, up to 2 only
-    args.subband_transform = 'fft' # 'dwt' (default), 'fft', or 'dct'
+    args.subband_transform = 'dwt' # 'dwt' (default), 'fft', or 'dct'
+    args.dwt_wavelet = 'haar' # haar , db4
 
     # Select transform-specific stats NPZ based on existing DWT path if needed
     transform = getattr(args, 'subband_transform', 'dwt')
@@ -192,10 +193,10 @@ if __name__ == '__main__':
 
     # Enforce FFT/DCT constraints: only 2D, level-1
     if getattr(args, 'subband_transform', 'dwt') in ['fft', 'dct']:
-        # Force constraints for non-DWT transforms
-        if getattr(args, 'dwt_align_3d', False):
-            print('[INFO] subband_transform is', args.subband_transform, ': forcing 2D (dwt_align_3d=False)')
-            args.dwt_align_3d = False
+        # # Force constraints for non-DWT transforms
+        # if getattr(args, 'dwt_align_3d', False):
+        #     print('[INFO] subband_transform is', args.subband_transform, ': forcing 2D (dwt_align_3d=False)')
+        #     args.dwt_align_3d = False
         if getattr(args, 'dwt_align_levels', 1) != 1:
             print('[INFO] subband_transform is', args.subband_transform, ': forcing level-1 (dwt_align_levels=1)')
             args.dwt_align_levels = 1
@@ -227,6 +228,10 @@ if __name__ == '__main__':
         # Include transform choice
         transform = getattr(args, 'subband_transform', 'dwt')
         suffix += f"_{transform}Align{'3D' if getattr(args, 'dwt_align_3d', False) else '2D'}-L{getattr(args, 'dwt_align_levels', 1)}"
+        if transform == 'dwt':
+            # Wavelet family used for DWT (haar/db4)
+            wavelet = getattr(args, 'dwt_wavelet', 'haar')
+            suffix += f"-{wavelet}"
         if getattr(args, 'dwt_align_adaptive_lambda', False):
             suffix += "_adaptive"
         # Compact lambda encoding: include only lambdas > 0 to keep suffix short

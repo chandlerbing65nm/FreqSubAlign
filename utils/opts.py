@@ -17,7 +17,7 @@ parser = argparse.ArgumentParser(description="ViTTA")
 
 # ========================= Dataset Configuration ==========================
 parser.add_argument('--dataset', type=str, default='ucf101',
-                    choices=['ucf101', 'somethingv2', 'kinetics'])
+                    choices=['ucf101', 'somethingv2', 'kinetics', 'uffia'])
 parser.add_argument('--modality', type=str, default='RGB')
 parser.add_argument('--root_path', default='None', type=str)
 parser.add_argument('--video_data_dir', type=str,
@@ -27,8 +27,8 @@ parser.add_argument('--vid_format', default='', type=str,
                     help='video format if not specified in filenames')
 parser.add_argument('--datatype', default='vid', type=str, choices=['vid', 'frame'])
 # Choose corruption list size
-parser.add_argument('--corruption_list', type=str, default='full', choices=['mini', 'full', 'continual', 'random'],
-                    help='Which corruption list to evaluate: mini (quick sanity), full (complete set), continual (mixed sequence), or random (randomized sequence)')
+parser.add_argument('--corruption_list', type=str, default='full', choices=['mini', 'full', 'continual', 'random', 'continual_alternate'],
+                    help='Which corruption list to evaluate: mini (quick sanity), full (complete set), continual (mixed sequence), continual_alternate (alternating sequence), or random (randomized sequence)')
 
 # Optional: print exact validation corruption order as read from list file
 parser.add_argument('--print_val_corrupt_order', action='store_true',
@@ -49,6 +49,13 @@ parser.add_argument('--result_dir', type=str,
                     help='result directory')
 parser.add_argument('--result_suffix', type=str, default='',
                     help='custom suffix to append to result files for unique identification')
+
+# ========================= Baseline Evaluation Configuration ==========================
+parser.add_argument('--baseline', type=str, default='source',
+                    choices=['source', 'shot', 'tent', 'dua', 'rem', 't3a', 'norm'],
+                    help='Baseline method when not using TTA (source-only evaluation)')
+parser.add_argument('--t3a_filter_k', type=int, default=100,
+                    help='Top-k filter size used by T3A baseline')
 
 # ========================= Model Configuration ==========================
 parser.add_argument('--arch', type=str, default='tanet',
@@ -100,6 +107,8 @@ parser.add_argument('--dwt_align_enable', action='store_true',
                     help='Enable DWT subband statistics alignment hook')
 parser.add_argument('--subband_transform', type=str, default='dwt', choices=['dwt', 'fft', 'dct'],
                     help='Subband transform to use for stats and alignment: dwt (default), fft, or dct. FFT/DCT are 2D level-1 only and heuristically partitioned into LL/LH/HL/HH.')
+parser.add_argument('--dwt_wavelet', type=str, default='haar', choices=['haar', 'db2', 'db4'],
+                    help='Wavelet family to use for DWT-based alignment/preprocessing (haar, db2, or db4). Non-Haar currently supported for 2D DWT; 3D will fall back to haar.')
 parser.add_argument('--dwt_align_adaptive_lambda', action='store_true', 
                     help='Scale lambdas by subband energy proportion')
 parser.add_argument('--dwt_align_levels', type=int, default=1,
@@ -184,5 +193,4 @@ parser.add_argument('--resume', default='', type=str, metavar='PATH',
 def get_opts():
     args = parser.parse_args()
     args.evaluate_baselines = not args.tta
-    args.baseline = 'source'
     return args

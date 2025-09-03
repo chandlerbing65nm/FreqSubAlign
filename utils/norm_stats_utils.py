@@ -150,6 +150,7 @@ class CombineNormStatsRegHook_DWT():
         n_augmented_views: int = 1,
         dwt_3d: bool = False,
         subband_transform: str = 'dwt',
+        wavelet: str = 'haar',
     ):
         self.hook = module.register_forward_hook(self.hook_fn)
         self.clip_len = clip_len
@@ -162,6 +163,7 @@ class CombineNormStatsRegHook_DWT():
         self.n_augmented_views = n_augmented_views
         self.dwt_3d = bool(dwt_3d)
         self.subband_transform = str(subband_transform).lower()
+        self.wavelet = str(wavelet).lower()
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -222,26 +224,83 @@ class CombineNormStatsRegHook_DWT():
         return kLLL, kLLH, kLHL, kLHH, kHLL, kHLH, kHHL, kHHH
 
     @staticmethod
-    def _dwt2d_per_frame(x):
+    def _db2_filters(device, dtype=None):
+        """
+        Return 1D db2 (Daubechies-2, 4-tap) analysis filters (low-pass and high-pass).
+        Orthonormal convention. Matches PyWavelets 'db2' dec_lo up to float precision.
+        """
+        # Using closed-form (sqrt3 expression) exact coefficients
+        import math
+        sqrt3 = math.sqrt(3.0)
+        denom = 4.0 * math.sqrt(2.0)
+        h = torch.tensor([
+            (1.0 + sqrt3) / denom,
+            (3.0 + sqrt3) / denom,
+            (3.0 - sqrt3) / denom,
+            (1.0 - sqrt3) / denom,
+        ], device=device, dtype=dtype if dtype is not None else torch.float32)
+        idx = torch.arange(h.numel() - 1, -1, -1, device=device)
+        sign = torch.tensor([1.0, -1.0, 1.0, -1.0], device=device, dtype=h.dtype)
+        g = sign * h.index_select(0, idx)
+        return h, g
+
+    @staticmethod
+    def _db4_filters(device, dtype=None):
+        """
+        Return 1D db4 (Daubechies-4, 8-tap) analysis filters (low-pass and high-pass).
+        Coefficients from PyWavelets 'db4' dec_lo.
+        """
+        h = torch.tensor([
+            -0.010597401784997278,
+             0.032883011666982945,
+             0.030841381835560763,
+            -0.18703481171888114,
+            -0.027983769416859854,
+             0.6308807679295904,
+             0.7148465705529154,
+             0.2303778133088964,
+        ], device=device, dtype=dtype if dtype is not None else torch.float32)
+        L = h.numel()
+        idx = torch.arange(L - 1, -1, -1, device=device)
+        # g[n] = (-1)^n h[L-1-n]
+        sign = torch.tensor([1.0 if (i % 2 == 0) else -1.0 for i in range(L)], device=device, dtype=h.dtype)
+        g = sign * h.index_select(0, idx)
+        return h, g
+
+    @staticmethod
+    def _dwt2d_per_frame_wavelet(x, wavelet: str):
         """
         x: (N, C, H, W)
-        returns tuple of subbands each (N, C, H/2, W/2)
+        returns tuple of subbands each approximately half spatial size.
         """
         device = x.device
         N, C, H, W = x.shape
-        kLL, kLH, kHL, kHH = CombineNormStatsRegHook_DWT._haar_kernels(device)
-        # Build group conv kernels of shape (4*C, 1, 2, 2) then use groups=C and repeat per channel
-        base = torch.stack([kLL, kLH, kHL, kHH], dim=0)  # (4, 2, 2)
-        weight = base.unsqueeze(1)  # (4,1,2,2)
-        weight = weight.repeat(C, 1, 1, 1)  # (4*C,1,2,2)
-        x_r = x.view(N, C, H, W)
-        y = F.conv2d(x_r, weight, bias=None, stride=2, padding=0, groups=C)  # (N, 4*C, H/2, W/2)
-        y = y.view(N, C, 4, y.shape[-2], y.shape[-1]).contiguous()  # (N, C, 4, H2, W2)
-        LL = y[:, :, 0]
-        LH = y[:, :, 1]
-        HL = y[:, :, 2]
-        HH = y[:, :, 3]
-        return LL, LH, HL, HH
+        if wavelet == 'haar':
+            kLL, kLH, kHL, kHH = CombineNormStatsRegHook_DWT._haar_kernels(device)
+            base = torch.stack([kLL, kLH, kHL, kHH], dim=0)  # (4, 2, 2)
+        elif wavelet == 'db2':
+            h, g = CombineNormStatsRegHook_DWT._db2_filters(device, x.dtype)
+            # Outer products to form separable 2D kernels
+            kLL = torch.ger(h, h)
+            kLH = torch.ger(h, g)
+            kHL = torch.ger(g, h)
+            kHH = torch.ger(g, g)
+            base = torch.stack([kLL, kLH, kHL, kHH], dim=0)  # (4, 4, 4)
+        elif wavelet == 'db4':
+            h, g = CombineNormStatsRegHook_DWT._db4_filters(device, x.dtype)
+            # Outer products to form separable 2D kernels
+            kLL = torch.ger(h, h)
+            kLH = torch.ger(h, g)
+            kHL = torch.ger(g, h)
+            kHH = torch.ger(g, g)
+            base = torch.stack([kLL, kLH, kHL, kHH], dim=0)  # (4, 8, 8)
+        else:
+            raise ValueError(f"Unsupported wavelet: {wavelet}")
+        weight = base.unsqueeze(1)  # (4,1,k,k)
+        weight = weight.repeat(C, 1, 1, 1)  # (4*C,1,k,k)
+        y = F.conv2d(x, weight, bias=None, stride=2, padding=0, groups=C)
+        y = y.view(N, C, 4, y.shape[-2], y.shape[-1]).contiguous()
+        return y[:, :, 0], y[:, :, 1], y[:, :, 2], y[:, :, 3]
 
     @staticmethod
     def _fft2d_level1(x):
@@ -254,8 +313,8 @@ class CombineNormStatsRegHook_DWT():
         # Stack frames into batch for efficiency
         xt = x.permute(0, 2, 1, 3, 4).contiguous().view(N * T, C, H, W)
         # Complex spectrum
-        # Use orthonormal FFT to keep spectrum scale stable across spatial sizes
-        spec = torch.fft.fft2(xt, dim=(-2, -1), norm='ortho')
+        # Use normalization FFT to keep spectrum scale stable across spatial sizes
+        spec = torch.fft.fft2(xt, dim=(-2, -1), norm='forward')
         mag = torch.abs(spec)
         h2, w2 = H // 2, W // 2
         # Quadrants (top-left is low-low due to unshifted zero-freq at [0,0])
@@ -300,6 +359,84 @@ class CombineNormStatsRegHook_DWT():
         return back(cLL), back(cLH), back(cHL), back(cHH)
 
     @staticmethod
+    def _fft3d_level1(x):
+        """
+        3D FFT per volume on (T,H,W). Partition unshifted spectrum into 8 octants.
+        x: (N, C, T, H, W)
+        returns LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH with shapes (N, C, T//2, H//2, W//2) where possible.
+        """
+        N, C, T, H, W = x.shape
+        # Flatten N,C to batch for efficiency
+        X = x.view(N * C, T, H, W)
+        spec = torch.fft.fftn(X, dim=(-3, -2, -1), norm='ortho')
+        mag = torch.abs(spec)
+        t2, h2, w2 = T // 2, H // 2, W // 2
+        qLLL = mag[:, 0:t2, 0:h2, 0:w2]
+        qLLH = mag[:, 0:t2, 0:h2, w2:]
+        qLHL = mag[:, 0:t2, h2:, 0:w2]
+        qLHH = mag[:, 0:t2, h2:, w2:]
+        qHLL = mag[:, t2:, 0:h2, 0:w2]
+        qHLH = mag[:, t2:, 0:h2, w2:]
+        qHHL = mag[:, t2:, h2:, 0:w2]
+        qHHH = mag[:, t2:, h2:, w2:]
+        def back(v):
+            tq, hq, wq = v.shape[-3], v.shape[-2], v.shape[-1]
+            return v.view(N, C, tq, hq, wq).contiguous()
+        return back(qLLL), back(qLLH), back(qLHL), back(qLHH), back(qHLL), back(qHLH), back(qHHL), back(qHHH)
+
+    @staticmethod
+    def _apply_dct1d(x: torch.Tensor, N: int, dim: int):
+        """
+        Apply orthonormal DCT-II along a given dim using cached matrix fallback.
+        x: input tensor, apply along dim of size N
+        Returns tensor with same shape.
+        """
+        D = _get_dct_matrix(N, x.device, x.dtype)  # (N,N)
+        # Move target dim to last
+        perm = list(range(x.ndim))
+        perm[dim], perm[-1] = perm[-1], perm[dim]
+        xt = x.permute(*perm).contiguous()  # (..., N)
+        B = int(xt.numel() // N)
+        xt2 = xt.view(B, N)
+        yt2 = (D @ xt2.T).T  # (B, N)
+        yt = yt2.view(*xt.shape)
+        # Move back
+        inv = list(range(yt.ndim))
+        inv[dim], inv[-1] = inv[-1], inv[dim]
+        return yt.permute(*inv).contiguous()
+
+    @staticmethod
+    def _dct3d_level1(x):
+        """
+        3D DCT-II per volume (separable along T,H,W). Partition into 8 octants.
+        Uses torch.fft.dct if available on dims (-3,-2,-1); otherwise falls back to cached matrix multiplies.
+        x: (N, C, T, H, W)
+        returns LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH
+        """
+        N, C, T, H, W = x.shape
+        if hasattr(torch.fft, 'dct'):
+            X = x
+            X = torch.fft.dct(X, type=2, dim=-3, norm='ortho')
+            X = torch.fft.dct(X, type=2, dim=-2, norm='ortho')
+            coeff = torch.fft.dct(X, type=2, dim=-1, norm='ortho')
+        else:
+            # Fallback: apply separable DCT via cached matrices
+            X = x
+            X = CombineNormStatsRegHook_DWT._apply_dct1d(X, T, dim=-3)
+            X = CombineNormStatsRegHook_DWT._apply_dct1d(X, H, dim=-2)
+            coeff = CombineNormStatsRegHook_DWT._apply_dct1d(X, W, dim=-1)
+        t2, h2, w2 = T // 2, H // 2, W // 2
+        cLLL = coeff[:, :, 0:t2, 0:h2, 0:w2]
+        cLLH = coeff[:, :, 0:t2, 0:h2, w2:]
+        cLHL = coeff[:, :, 0:t2, h2:, 0:w2]
+        cLHH = coeff[:, :, 0:t2, h2:, w2:]
+        cHLL = coeff[:, :, t2:, 0:h2, 0:w2]
+        cHLH = coeff[:, :, t2:, 0:h2, w2:]
+        cHHL = coeff[:, :, t2:, h2:, 0:w2]
+        cHHH = coeff[:, :, t2:, h2:, w2:]
+        return cLLL.contiguous(), cLLH.contiguous(), cLHL.contiguous(), cLHH.contiguous(), cHLL.contiguous(), cHLH.contiguous(), cHHL.contiguous(), cHHH.contiguous()
+
+    @staticmethod
     def _dwt3d_multi_level(x, levels: int):
         """
         x: (N, C, T, H, W)
@@ -333,7 +470,7 @@ class CombineNormStatsRegHook_DWT():
         return subbands
 
     @staticmethod
-    def _dwt2d_multi_level(x, levels: int):
+    def _dwt2d_multi_level(x, levels: int, wavelet: str = 'haar'):
         """
         x: (N, C, T, H, W)
         returns deepest level subbands each (N, C, T, H/2^L, W/2^L)
@@ -344,7 +481,7 @@ class CombineNormStatsRegHook_DWT():
         for _ in range(levels):
             # process per frame to avoid 3D conv; stack T into batch
             cur_2d = cur.permute(0, 2, 1, 3, 4).contiguous().view(N * T, C, cur.shape[-2], cur.shape[-1])
-            LL, LH, HL, HH = CombineNormStatsRegHook_DWT._dwt2d_per_frame(cur_2d)
+            LL, LH, HL, HH = CombineNormStatsRegHook_DWT._dwt2d_per_frame_wavelet(cur_2d, wavelet)
             H2, W2 = LL.shape[-2], LL.shape[-1]
             # reshape back to (N, C, T, H2, W2)
             LL = LL.view(N, T, C, H2, W2).permute(0, 2, 1, 3, 4).contiguous()
@@ -389,6 +526,11 @@ class CombineNormStatsRegHook_DWT():
         if self.subband_transform == 'dwt':
             # DWT: support 3D or 2D multi-level
             if self.dwt_3d:
+                if self.wavelet != 'haar':
+                    # db4 3D not implemented; fall back to Haar with one-time warn
+                    if not hasattr(self, '_warned_db4_3d'):
+                        print('[WARN] dwt_wavelet!=haar with dwt_align_3d=True: falling back to Haar 3D DWT')
+                        self._warned_db4_3d = True
                 LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH = self._dwt3d_multi_level(feat, self.dwt_levels)
                 grouped = {
                     'LL': [LLL, HLL],
@@ -397,16 +539,34 @@ class CombineNormStatsRegHook_DWT():
                     'HH': [LHH, HHH],
                 }
             else:
-                LL, LH, HL, HH = self._dwt2d_multi_level(feat, self.dwt_levels)
+                LL, LH, HL, HH = self._dwt2d_multi_level(feat, self.dwt_levels, wavelet=self.wavelet)
                 grouped = {'LL': [LL], 'LH': [LH], 'HL': [HL], 'HH': [HH]}
         elif self.subband_transform == 'fft':
-            # FFT: only 2D level-1
-            LL, LH, HL, HH = self._fft2d_level1(feat)
-            grouped = {'LL': [LL], 'LH': [LH], 'HL': [HL], 'HH': [HH]}
+            # FFT: support 3D (level-1) or fallback to 2D (level-1)
+            if self.dwt_3d:
+                LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH = self._fft3d_level1(feat)
+                grouped = {
+                    'LL': [LLL, HLL],
+                    'LH': [LLH, HLH],
+                    'HL': [LHL, HHL],
+                    'HH': [LHH, HHH],
+                }
+            else:
+                LL, LH, HL, HH = self._fft2d_level1(feat)
+                grouped = {'LL': [LL], 'LH': [LH], 'HL': [HL], 'HH': [HH]}
         elif self.subband_transform == 'dct':
-            # DCT: only 2D level-1
-            LL, LH, HL, HH = self._dct2d_level1(feat)
-            grouped = {'LL': [LL], 'LH': [LH], 'HL': [HL], 'HH': [HH]}
+            # DCT: support 3D (level-1) or fallback to 2D (level-1)
+            if self.dwt_3d:
+                LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH = self._dct3d_level1(feat)
+                grouped = {
+                    'LL': [LLL, HLL],
+                    'LH': [LLH, HLH],
+                    'HL': [LHL, HHL],
+                    'HH': [LHH, HHH],
+                }
+            else:
+                LL, LH, HL, HH = self._dct2d_level1(feat)
+                grouped = {'LL': [LL], 'LH': [LH], 'HL': [HL], 'HH': [HH]}
         else:
             raise ValueError(f"Unknown subband_transform: {self.subband_transform}")
 
