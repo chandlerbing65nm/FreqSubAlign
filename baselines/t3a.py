@@ -15,6 +15,18 @@ def get_cls_ext(args, net):
         ext.module.new_fc = nn.Identity()
         for k, v in classifier.named_parameters():
             v.requires_grad = False
+    elif args.arch == 'videoswintransformer':
+        # Freeze the classifier head parameters
+        for k, v in net.module.cls_head.named_parameters():
+            v.requires_grad = False
+        # Use the final linear layer of the classifier head as the classifier
+        classifier = net.module.cls_head.fc_cls
+        # Build feature extractor: backbone -> adaptive pooling -> flatten
+        ext = nn.Sequential(
+            net.module.backbone,
+            nn.AdaptiveAvgPool3d(1),
+            nn.Flatten(start_dim=1)
+        )
     else:
         for k, v in net.named_parameters():
             if 'logits' in k:
@@ -29,7 +41,6 @@ def get_cls_ext(args, net):
 class T3A(nn.Module):
     """
     Test Time Template Adjustments (T3A)
-
     """
 
     def __init__(self, args, ext, classifier):
@@ -37,11 +48,22 @@ class T3A(nn.Module):
         self.args = args
         self.model = ext
         self.classifier = classifier
-        self.classifier.weight.requires_grad = False  # To save memory ...
-        self.classifier.bias.requires_grad = False  # To save memory ...
-
-        self.warmup_supports = self.classifier.weight.data
-        warmup_prob = self.classifier(self.warmup_supports)
+        
+        # Handle different classifier types
+        if hasattr(classifier, 'weight'):
+            # Standard linear classifier (now including Video Swin Transformer's linear layer)
+            self.warmup_supports = self.classifier.weight.data
+        else:
+            # Fallback: use random initialization
+            feature_dim = ext.output_dim if hasattr(ext, 'output_dim') else 512
+            self.warmup_supports = torch.randn(args.num_classes, feature_dim)
+        
+        # Compute class probabilities without passing weight tensors
+        warmup_prob = torch.softmax(
+            torch.mm(self.warmup_supports, self.warmup_supports.t()), 
+            dim=1
+        )
+        
         self.warmup_ent = softmax_entropy(warmup_prob)
         self.warmup_labels = torch.nn.functional.one_hot(warmup_prob.argmax(1), num_classes=args.num_classes).float()
 
@@ -75,17 +97,27 @@ class T3A(nn.Module):
         return z @ torch.nn.functional.normalize(weights, dim=0)
 
     def select_supports(self):
+        device = self.supports.device  # Get device from model parameters
         ent_s = self.ent
-        y_hat = self.labels.argmax(dim=1).long()
+        y_hat = self.labels.argmax(dim=1).long().to(device)  # Ensure y_hat is on the same device
         filter_K = self.filter_K
         if filter_K == -1:
-            indices = torch.LongTensor(list(range(len(ent_s))))
+            indices = torch.arange(len(ent_s), device=device)
+            return self.supports[indices], self.labels[indices]
 
         indices = []
-        indices1 = torch.LongTensor(list(range(len(ent_s))))
+        indices1 = torch.arange(len(ent_s), device=device)  # Create tensor directly on the right device
         for i in range(self.num_classes):
-            _, indices2 = torch.sort(ent_s[y_hat == i])
-            indices.append(indices1[y_hat == i][indices2][:filter_K])
+            mask = (y_hat == i)
+            if mask.any():
+                _, indices2 = torch.sort(ent_s[mask])
+                if filter_K > 0 and len(indices2) > 0:
+                    selected = indices1[mask][indices2][:filter_K]
+                    indices.append(selected)
+        
+        if not indices:  # Handle case where no indices were selected
+            return self.supports, self.labels
+            
         indices = torch.cat(indices)
 
         self.supports = self.supports[indices]
@@ -101,11 +133,15 @@ def t3a_forward_and_adapt(args, ext, cls, val_loader):
         total = 0
         correct_list = []
         top1 = AverageMeter()
+        top5 = AverageMeter()
+        batch_time = AverageMeter()
+        end = time.time()
 
         for i, (input, target) in enumerate(val_loader):  #
             ext.eval()
             cls.eval()
             actual_bz = input.shape[0]
+            n_views = input.shape[1]
             input = input.cuda()
             target = target.cuda()
             if args.arch == 'tanet':
@@ -115,14 +151,42 @@ def t3a_forward_and_adapt(args, ext, cls, val_loader):
                                        args.clip_length, 3, input.size(2), input.size(3))
                 output = model(input)
                 output = output.reshape(actual_bz, args.test_crops * n_clips, -1).mean(1)
-                logits = torch.squeeze(output)
+                # Ensure we maintain batch dimension for accuracy calculation
+                if output.dim() == 1:
+                    logits = output.unsqueeze(0)
+                else:
+                    logits = output
                 prec1, prec5 = accuracy(logits.data, target, topk=(1, 5))
                 top1.update(prec1.item(), actual_bz)
+                top5.update(prec5.item(), actual_bz)
+            elif args.arch == 'videoswintransformer':
+                input = input.reshape((-1,) + input.shape[2:])
+                output = model(input)
+                # Ensure we maintain batch dimension for accuracy calculation
+                if output.dim() == 1:
+                    logits = output.unsqueeze(0)
+                else:
+                    logits = output
+                prec1, prec5 = accuracy(logits.data, target, topk=(1, 5))
+                top1.update(prec1.item(), actual_bz)
+                top5.update(prec5.item(), actual_bz)
             else:
                 input = input.reshape((-1,) + input.shape[2:])
                 output = model(input)
                 logits = torch.squeeze(output)
                 prec1, prec5 = accuracy(logits.data, target, topk=(1, 5))
                 top1.update(prec1.item(), actual_bz)
+                top5.update(prec5.item(), actual_bz)
+            
+            # Measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
+            
+            if i % args.print_freq == 0:
+                print('Test: [{0}/{1}]\t'
+                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                      'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
+                      'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+                    i, len(val_loader), batch_time=batch_time, top1=top1, top5=top5))
+    
     return top1.avg
-

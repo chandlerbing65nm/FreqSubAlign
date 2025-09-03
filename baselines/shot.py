@@ -49,16 +49,17 @@ def configure_shot(net, logger, args):
         for k, v in classifier.named_parameters():
             v.requires_grad = False
     elif args.arch == 'videoswintransformer':
-        classifier = net.module.cls_head
-        ext = net.module.backbone  # Use backbone directly for feature extraction
-        ext.cls_head = nn.Identity()
-
-        for k, v in classifier.named_parameters():
-            if 'cls_head' in k:
-                v.requires_grad = False  # freeze the classifier
-        for k, v in ext.named_parameters():
-            v.requires_grad = True
-        # No need to set head to identity since we're using backbone directly
+        # Freeze the classifier head parameters
+        for k, v in net.module.cls_head.named_parameters():
+            v.requires_grad = False
+        # Use the final linear layer of the classifier head as the classifier
+        classifier = net.module.cls_head.fc_cls
+        # Build feature extractor: backbone -> adaptive pooling -> flatten
+        ext = nn.Sequential(
+            net.module.backbone,
+            nn.AdaptiveAvgPool3d(1),
+            nn.Flatten(start_dim=1)
+        )
     else:
         for k, v in net.named_parameters():
             if 'logits' in k:
