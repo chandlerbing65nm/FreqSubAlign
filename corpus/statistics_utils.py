@@ -268,15 +268,17 @@ def compute_dwt_subband_statistics(model=None, args=None, logger=None, log_time=
         candidate_layers = [nn.BatchNorm2d, nn.BatchNorm3d]
         chosen_layers = choose_layers(model, candidate_layers)
 
-    # Hook to compute batch subband stats
+    # Hook to compute batch subband stats (supports DWT/FFT/DCT)
     class ComputeDWTSubbandStatsHook:
         def __init__(self, module, clip_len, dwt_levels, before_norm=False,
-                     if_sample_tta_aug_views=False, n_augmented_views=1):
+                     if_sample_tta_aug_views=False, n_augmented_views=1,
+                     subband_transform: str = 'dwt'):
             self.clip_len = clip_len
             self.dwt_levels = max(1, int(dwt_levels))
             self.before_norm = before_norm
             self.if_sample_tta_aug_views = if_sample_tta_aug_views
             self.n_augmented_views = n_augmented_views
+            self.subband_transform = str(subband_transform).lower()
             self.hook = module.register_forward_hook(self.hook_fn)
             self.results = {b: {'mean': None, 'var': None} for b in bands}
 
@@ -305,8 +307,15 @@ def compute_dwt_subband_statistics(model=None, args=None, logger=None, log_time=
                 else:
                     return
 
-                # Apply multi-level 2D DWT per frame
-                LL, LH, HL, HH = CombineNormStatsRegHook_DWT._dwt2d_multi_level(feat, self.dwt_levels)
+                # Apply selected transform
+                if self.subband_transform == 'dwt':
+                    LL, LH, HL, HH = CombineNormStatsRegHook_DWT._dwt2d_multi_level(feat, self.dwt_levels)
+                elif self.subband_transform == 'fft':
+                    LL, LH, HL, HH = CombineNormStatsRegHook_DWT._fft2d_level1(feat)
+                elif self.subband_transform == 'dct':
+                    LL, LH, HL, HH = CombineNormStatsRegHook_DWT._dct2d_level1(feat)
+                else:
+                    raise ValueError(f"Unknown subband_transform: {self.subband_transform}")
                 subband_tensors = {'LL': LL, 'LH': LH, 'HL': HL, 'HH': HH}
                 for b in bands:
                     sb = subband_tensors[b]
@@ -338,6 +347,7 @@ def compute_dwt_subband_statistics(model=None, args=None, logger=None, log_time=
             before_norm=getattr(args, 'before_norm', False),
             if_sample_tta_aug_views=getattr(args, 'if_sample_tta_aug_views', False),
             n_augmented_views=getattr(args, 'n_augmented_views', 1),
+            subband_transform=getattr(args, 'subband_transform', 'dwt'),
         )
         compute_stat_hooks.append(hook)
         for b in bands:
@@ -409,9 +419,15 @@ def compute_dwt_subband_statistics(model=None, args=None, logger=None, log_time=
                 out[f'{b}_mean'].append(None)
                 out[f'{b}_var'].append(None)
 
-    # Save NPZ matching loader in TTA
+    # Enforce constraints for FFT/DCT: only 2D, level-1
+    transform = getattr(args, 'subband_transform', 'dwt')
+    if transform in ['fft', 'dct']:
+        if getattr(args, 'dwt_align_levels', 1) != 1 and logger is not None:
+            logger.warning(f"{transform.upper()} subband stats: forcing level-1 for saving; stats computed at requested level but saved as L1")
+    # Save NPZ matching TTA loader expectations
     levels = getattr(args, 'dwt_align_levels', 1)
-    save_path = osp.join(args.result_dir, f'dwt_subband_stats_L{levels}_{log_time}.npz')
+    prefix = f"{transform}_subband_stats_L{1 if transform in ['fft','dct'] else levels}"
+    save_path = osp.join(args.result_dir, f'{prefix}_{log_time}.npz')
     np.savez(
         save_path,
         LL_mean=np.array(out['LL_mean'], dtype=object), LL_var=np.array(out['LL_var'], dtype=object),
@@ -420,7 +436,7 @@ def compute_dwt_subband_statistics(model=None, args=None, logger=None, log_time=
         HH_mean=np.array(out['HH_mean'], dtype=object), HH_var=np.array(out['HH_var'], dtype=object),
     )
     if logger is not None:
-        logger.debug(f'Saved DWT subband stats to {save_path}')
+        logger.debug(f'Saved {transform.upper()} subband stats to {save_path}')
     else:
-        print(f'Saved DWT subband stats to {save_path}')
+        print(f'Saved {transform.upper()} subband stats to {save_path}')
 

@@ -40,14 +40,23 @@ if __name__ == '__main__':
     args.evaluate_baselines = not args.tta
     args.baseline = 'source'
 
-    # Request DWT subband statistics computation
+    # Request subband statistics computation (DWT/FFT/DCT)
     args.compute_stat = 'dwt_subbands'
+    # Select transform: dwt (default), fft, or dct
+    args.subband_transform = 'fft'
 
-    # DWT alignment parameters for stats extraction
+    # Subband alignment parameters for stats extraction
     # args.dwt_align_3d = True
+    # For FFT/DCT, enforce 2D, level-1 by design
     args.dwt_align_levels = 1
 
-    # Output directory for stats NPZ
-    args.result_dir = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt'
+    # Output directory for stats NPZ (organize by transform)
+    base_stats_dir = '/scratch/project_465001897/datasets/ucf'
+    subdir = {
+        'dwt': 'source_statistics_tanet_dwt',
+        'fft': 'source_statistics_tanet_fft',
+        'dct': 'source_statistics_tanet_dct',
+    }.get(args.subband_transform, 'source_statistics_tanet_dwt')
+    args.result_dir = os.path.join(base_stats_dir, subdir)
 
     eval(args=args)

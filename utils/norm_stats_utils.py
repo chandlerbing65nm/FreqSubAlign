@@ -3,6 +3,27 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from utils.utils_ import AverageMeter, AverageMeterTensor, MovingAverageTensor
+
+# Cache for orthonormal DCT-II matrices per (N, device, dtype)
+_DCT_MATS = {}
+
+def _get_dct_matrix(N: int, device, dtype):
+    """Return orthonormal DCT-II matrix of size (N,N) on device/dtype.
+    C[k,n] = alpha(k) * sqrt(2/N) * cos(pi*(n+0.5)*k/N), with alpha(0)=1/sqrt(2).
+    """
+    key = (N, device, dtype)
+    cached = _DCT_MATS.get(key)
+    if cached is not None:
+        return cached
+    n = torch.arange(N, device=device, dtype=dtype)
+    k = torch.arange(N, device=device, dtype=dtype).unsqueeze(1)
+    # compute cos(pi*(n+0.5)*k/N) where broadcasting gives (N, N)
+    cos_arg = (torch.pi * (n + 0.5) * k) / N
+    C = torch.cos(cos_arg)
+    C *= (2.0 / N) ** 0.5
+    C[0, :] *= 0.5 ** 0.5  # alpha(0) = 1/sqrt(2)
+    _DCT_MATS[key] = C
+    return C
 from config import device
 
 l1_loss = nn.L1Loss(reduction='mean')
@@ -128,6 +149,7 @@ class CombineNormStatsRegHook_DWT():
         if_sample_tta_aug_views: bool = False,
         n_augmented_views: int = 1,
         dwt_3d: bool = False,
+        subband_transform: str = 'dwt',
     ):
         self.hook = module.register_forward_hook(self.hook_fn)
         self.clip_len = clip_len
@@ -139,6 +161,7 @@ class CombineNormStatsRegHook_DWT():
         self.if_sample_tta_aug_views = if_sample_tta_aug_views
         self.n_augmented_views = n_augmented_views
         self.dwt_3d = bool(dwt_3d)
+        self.subband_transform = str(subband_transform).lower()
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -219,6 +242,62 @@ class CombineNormStatsRegHook_DWT():
         HL = y[:, :, 2]
         HH = y[:, :, 3]
         return LL, LH, HL, HH
+
+    @staticmethod
+    def _fft2d_level1(x):
+        """
+        2D FFT per frame on spatial dims. Partition unshifted spectrum into 4 equal quadrants.
+        x: (N, C, T, H, W)
+        returns LL, LH, HL, HH each (N, C, T, H//2, W//2) based on magnitude of fft2 (no shift).
+        """
+        N, C, T, H, W = x.shape
+        # Stack frames into batch for efficiency
+        xt = x.permute(0, 2, 1, 3, 4).contiguous().view(N * T, C, H, W)
+        # Complex spectrum
+        # Use orthonormal FFT to keep spectrum scale stable across spatial sizes
+        spec = torch.fft.fft2(xt, dim=(-2, -1), norm='ortho')
+        mag = torch.abs(spec)
+        h2, w2 = H // 2, W // 2
+        # Quadrants (top-left is low-low due to unshifted zero-freq at [0,0])
+        qLL = mag[:, :, 0:h2, 0:w2]
+        qLH = mag[:, :, 0:h2, w2:]
+        qHL = mag[:, :, h2:, 0:w2]
+        qHH = mag[:, :, h2:, w2:]
+        # Reshape back to (N, C, T, hq, wq) using dynamic quadrant sizes (supports odd H/W)
+        def back(v):
+            hq, wq = v.shape[-2], v.shape[-1]
+            return v.view(N, T, C, hq, wq).permute(0, 2, 1, 3, 4).contiguous()
+        return back(qLL), back(qLH), back(qHL), back(qHH)
+
+    @staticmethod
+    def _dct2d_level1(x):
+        """
+        2D DCT-II per frame (separable along H and W). Partition into equal quadrants.
+        Uses torch.fft.dct if available; otherwise falls back to matmul with orthonormal DCT matrices.
+        x: (N, C, T, H, W)
+        returns LL, LH, HL, HH each (N, C, T, H//2, W//2)
+        """
+        N, C, T, H, W = x.shape
+        xt = x.permute(0, 2, 1, 3, 4).contiguous().view(N * T, C, H, W)
+        if hasattr(torch.fft, 'dct'):
+            # Apply DCT-II along H then W (ortho normalization for energy preservation)
+            coeff = torch.fft.dct(torch.fft.dct(xt, type=2, dim=-2, norm='ortho'), type=2, dim=-1, norm='ortho')
+        else:
+            # Fallback using separable orthonormal DCT matrices
+            Dh = _get_dct_matrix(H, xt.device, xt.dtype)  # (H,H)
+            Dw = _get_dct_matrix(W, xt.device, xt.dtype)  # (W,W)
+            X = xt.reshape(-1, H, W)  # (NT*C, H, W)
+            Y = torch.matmul(Dh, X)   # (NT*C, H, W)
+            coeff = torch.matmul(Y, Dw.t()).reshape(N * T, C, H, W)
+        h2, w2 = H // 2, W // 2
+        cLL = coeff[:, :, 0:h2, 0:w2]
+        cLH = coeff[:, :, 0:h2, w2:]
+        cHL = coeff[:, :, h2:, 0:w2]
+        cHH = coeff[:, :, h2:, w2:]
+        def back(v):
+            hq, wq = v.shape[-2], v.shape[-1]
+            return v.view(N, T, C, hq, wq).permute(0, 2, 1, 3, 4).contiguous()
+        return back(cLL), back(cLH), back(cHL), back(cHH)
 
     @staticmethod
     def _dwt3d_multi_level(x, levels: int):
@@ -306,23 +385,30 @@ class CombineNormStatsRegHook_DWT():
         else:
             return
 
-        # Apply multi-level DWT (2D or 3D) and compute grouped subband stats
-        if self.dwt_3d:
-            LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH = self._dwt3d_multi_level(feat, self.dwt_levels)
-            grouped = {
-                'LL': [LLL, HLL],
-                'LH': [LLH, HLH],
-                'HL': [LHL, HHL],
-                'HH': [LHH, HHH],
-            }
+        # Apply selected subband transform
+        if self.subband_transform == 'dwt':
+            # DWT: support 3D or 2D multi-level
+            if self.dwt_3d:
+                LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH = self._dwt3d_multi_level(feat, self.dwt_levels)
+                grouped = {
+                    'LL': [LLL, HLL],
+                    'LH': [LLH, HLH],
+                    'HL': [LHL, HHL],
+                    'HH': [LHH, HHH],
+                }
+            else:
+                LL, LH, HL, HH = self._dwt2d_multi_level(feat, self.dwt_levels)
+                grouped = {'LL': [LL], 'LH': [LH], 'HL': [HL], 'HH': [HH]}
+        elif self.subband_transform == 'fft':
+            # FFT: only 2D level-1
+            LL, LH, HL, HH = self._fft2d_level1(feat)
+            grouped = {'LL': [LL], 'LH': [LH], 'HL': [HL], 'HH': [HH]}
+        elif self.subband_transform == 'dct':
+            # DCT: only 2D level-1
+            LL, LH, HL, HH = self._dct2d_level1(feat)
+            grouped = {'LL': [LL], 'LH': [LH], 'HL': [HL], 'HH': [HH]}
         else:
-            LL, LH, HL, HH = self._dwt2d_multi_level(feat, self.dwt_levels)
-            grouped = {
-                'LL': [LL],
-                'LH': [LH],
-                'HL': [HL],
-                'HH': [HH],
-            }
+            raise ValueError(f"Unknown subband_transform: {self.subband_transform}")
 
         for b in self.bands:
             if self.source_mean[b] is None or self.source_var[b] is None:

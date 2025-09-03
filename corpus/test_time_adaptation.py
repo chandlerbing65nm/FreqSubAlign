@@ -349,6 +349,7 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                                                         if_sample_tta_aug_views=args.if_sample_tta_aug_views,
                                                         n_augmented_views=args.n_augmented_views,
                                                         dwt_3d=getattr(args, 'dwt_align_3d', False),
+                                                        subband_transform=getattr(args, 'subband_transform', 'dwt'),
                                                     )
                                                 )
                                                 hooks_for_this_layer += 1
@@ -432,16 +433,17 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                 loss_ce = criterion(output, target)
 
                 # Sum total regularization loss and track per-band DWT losses if available
-                loss_reg = torch.tensor(0).float().to(device)
+                loss_reg = torch.tensor(0).float().to(device)  # legacy accumulator (not used for final weighting)
                 loss_reg_base = torch.tensor(0).float().to(device)
                 loss_reg_dwt = torch.tensor(0).float().to(device)
                 per_band_totals = {b: torch.tensor(0.0, device=device) for b in ['LL', 'LH', 'HL', 'HH']}
                 if args.stat_reg:
                     for hook in stat_reg_hooks:
                         hook_loss = hook.r_feature.to(device)
+                        # Keep the unweighted sum for backward-compat logging if needed
                         loss_reg += hook_loss
                         # Aggregate DWT per-band losses from hooks that expose them
-                        if hasattr(hook, 'r_feature_bands') and isinstance(hook.r_feature_bands, dict):
+                        if hasattr(hook, 'r_feature_bands') and isinstance(hook, object) and isinstance(hook.r_feature_bands, dict):
                             loss_reg_dwt += hook_loss
                             for b, v in hook.r_feature_bands.items():
                                 if b in per_band_totals:
@@ -454,8 +456,12 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                 # Compute total loss
                 loss_components = []
                 
-                # Always include feature regularization
-                loss_components.append(args.lambda_feature_reg * loss_reg)
+                # Weighted base vs DWT alignment losses
+                lambda_base = getattr(args, 'lambda_base_align', 1.0)
+                lambda_dwt = getattr(args, 'lambda_dwt_align', 1.0)
+                loss_reg_weighted = lambda_base * loss_reg_base + lambda_dwt * loss_reg_dwt
+                # Always include feature regularization (as global multiplier)
+                loss_components.append(args.lambda_feature_reg * loss_reg_weighted)
                 
                 # Include prediction consistency if enabled
                 if if_pred_consistency:
@@ -467,7 +473,8 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                 loss.backward()
                 optimizer.step()
 
-                losses_reg.update(loss_reg.item(), actual_bz)
+                # Track total (weighted) regularization in meter
+                losses_reg.update(loss_reg_weighted.item(), actual_bz)
                 if if_pred_consistency:
                     losses_consis.update(loss_consis.item(), actual_bz)
                 # Update DWT per-band meters if enabled

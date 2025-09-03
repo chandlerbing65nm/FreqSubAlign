@@ -98,6 +98,8 @@ parser.add_argument('--dwt_levels', type=int, default=1,
 # ========================= DWT Subband Alignment (Hook) ==========================
 parser.add_argument('--dwt_align_enable', action='store_true',
                     help='Enable DWT subband statistics alignment hook')
+parser.add_argument('--subband_transform', type=str, default='dwt', choices=['dwt', 'fft', 'dct'],
+                    help='Subband transform to use for stats and alignment: dwt (default), fft, or dct. FFT/DCT are 2D level-1 only and heuristically partitioned into LL/LH/HL/HH.')
 parser.add_argument('--dwt_align_adaptive_lambda', action='store_true', 
                     help='Scale lambdas by subband energy proportion')
 parser.add_argument('--dwt_align_levels', type=int, default=1,
@@ -114,6 +116,11 @@ parser.add_argument('--dwt_align_lambda_hh', type=float, default=1.0,
                     help='Lambda weight for HH subband alignment')
 parser.add_argument('--dwt_stats_npz_file', type=str, default='',
                     help='Path to NPZ file containing clean DWT subband stats per chosen layer: keys like LL_mean, LL_var, LH_mean, LH_var, HL_mean, HL_var, HH_mean, HH_var')
+# Global weights to combine base (ViTTA) vs DWT alignment losses
+parser.add_argument('--lambda_base_align', type=float, default=1.0,
+                    help='Weight for base (ViTTA) alignment loss; set 0 to disable base alignment')
+parser.add_argument('--lambda_dwt_align', type=float, default=1.0,
+                    help='Weight for DWT subband alignment loss; set 0 to disable DWT alignment')
 parser.add_argument('--use_src_stat_in_reg', type=bool, default=True,
                     help='whether to use source statistics in the regularization loss')
 parser.add_argument('--fix_BNS', type=bool, default=True,

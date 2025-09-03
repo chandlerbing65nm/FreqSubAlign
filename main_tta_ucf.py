@@ -106,7 +106,7 @@ if __name__ == '__main__':
     set_seed(142)
     
     # Choose model architecture and dataset
-    args.arch = 'videoswintransformer'  # videoswintransformer, tanet
+    args.arch = 'tanet'  # videoswintransformer, tanet
     args.dataset = 'ucf101'
 
     # Map dataset names to directory names
@@ -118,7 +118,7 @@ if __name__ == '__main__':
     dataset_dir = dataset_to_dir.get(args.dataset, args.dataset)
 
     # Choose evaluation mode (TTA or source-only)
-    args.tta = False  # Set to False for source-only evaluation
+    args.tta = True  # Set to False for source-only evaluation
     
     # Get model configuration based on architecture and dataset
     model_config = get_model_config(args.arch, args.dataset, tta_mode=args.tta)
@@ -151,30 +151,54 @@ if __name__ == '__main__':
     # args.tsn_style = True
     # ========================= New Arguments ==========================
     args.corruption_list = 'continual' # mini, full, continual, random, continual_alternate
-    # args.dwt_preprocessing = True
-    # args.dwt_component = 'LL'
-    # args.dwt_levels = 1
 
-    # DWT subband alignment hook
-    # args.dwt_align_enable = True
+    # DWT/FFT/DCT subband alignment hook
+    args.dwt_align_enable = True
     # args.dwt_align_adaptive_lambda = True
     # args.dwt_align_3d = True
-    # args.dwt_align_levels = 1  # must match the NPZ, up to 2 only
+    args.dwt_align_levels = 1  # must match the NPZ, up to 2 only
+    args.subband_transform = 'fft' # 'dwt' (default), 'fft', or 'dct'
 
-    # if not os.path.exists(args.dwt_stats_npz_file):
-    #     print(f"[WARN] DWT stats NPZ not found: {args.dwt_stats_npz_file}")
+    # Select transform-specific stats NPZ based on existing DWT path if needed
+    transform = getattr(args, 'subband_transform', 'dwt')
+    if hasattr(args, 'dwt_stats_npz_file') and isinstance(args.dwt_stats_npz_file, str) and args.dwt_stats_npz_file:
+        npz_path = args.dwt_stats_npz_file
+        if transform =='dct':
+            # Heuristically adapt directory and filename from DWT to FFT/DCT
+            npz_path = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dct/dct_subband_stats_L1_20250903_173009.npz'
+        elif transform =='fft':
+            npz_path = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_fft/fft_subband_stats_L1_20250903_184842.npz'
+        
+        if npz_path != args.dwt_stats_npz_file:
+            args.dwt_stats_npz_file = npz_path
+    else:
+        args.dwt_stats_npz_file = ''
 
-    # # Choose alignment weights
-    # args.dwt_align_lambda_ll = 1.0
-    # args.dwt_align_lambda_lh = 1.0
-    # args.dwt_align_lambda_hl = 1.0
-    # args.dwt_align_lambda_hh = 1.0
+    if not os.path.exists(args.dwt_stats_npz_file):
+        print(f"[WARN] Subband stats NPZ not found for transform={transform}: {args.dwt_stats_npz_file}")
+
+    # Choose alignment weights
+    args.lambda_base_align = 1.0
+    args.dwt_align_lambda_ll = 1.0
+    args.dwt_align_lambda_lh = 1.0
+    args.dwt_align_lambda_hl = 1.0
+    args.dwt_align_lambda_hh = 1.0
 
     if args.dwt_align_3d == True and args.arch == 'tanet':
         args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt/dwt_subband_stats_L1_20250828_171707.npz'
     
     if args.dwt_align_levels == 2 and args.dwt_align_3d == False and args.arch == 'tanet':
         args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt/dwt_subband_stats_L2_20250828_163634.npz'
+
+    # Enforce FFT/DCT constraints: only 2D, level-1
+    if getattr(args, 'subband_transform', 'dwt') in ['fft', 'dct']:
+        # Force constraints for non-DWT transforms
+        if getattr(args, 'dwt_align_3d', False):
+            print('[INFO] subband_transform is', args.subband_transform, ': forcing 2D (dwt_align_3d=False)')
+            args.dwt_align_3d = False
+        if getattr(args, 'dwt_align_levels', 1) != 1:
+            print('[INFO] subband_transform is', args.subband_transform, ': forcing level-1 (dwt_align_levels=1)')
+            args.dwt_align_levels = 1
 
     # ============================================================================================
 
@@ -198,9 +222,11 @@ if __name__ == '__main__':
     # Append preprocessing and alignment settings
     if getattr(args, 'dwt_preprocessing', False):
         suffix += f"_dwt{args.dwt_component}-L{args.dwt_levels}"
-    # DWT subband alignment hook settings (for reproducibility)
+    # Subband alignment hook settings (for reproducibility)
     if getattr(args, 'dwt_align_enable', False):
-        suffix += f"_dwtAlign{'3D' if getattr(args, 'dwt_align_3d', False) else '2D'}-L{getattr(args, 'dwt_align_levels', 1)}"
+        # Include transform choice
+        transform = getattr(args, 'subband_transform', 'dwt')
+        suffix += f"_{transform}Align{'3D' if getattr(args, 'dwt_align_3d', False) else '2D'}-L{getattr(args, 'dwt_align_levels', 1)}"
         if getattr(args, 'dwt_align_adaptive_lambda', False):
             suffix += "_adaptive"
         # Compact lambda encoding: include only lambdas > 0 to keep suffix short

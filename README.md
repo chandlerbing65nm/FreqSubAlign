@@ -1,4 +1,4 @@
-# SWaveletA – How to run main_tta_ucf.py and main_tta_ss2.py without CLI args
+# SWaveletA – Subband Wavelet Alignment for Video Test-Time Adaptation
 
 This repo provides two entry scripts that are already set up to be configured by editing variables inside the files (no --args on the command line):
 
