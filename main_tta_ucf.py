@@ -106,7 +106,7 @@ if __name__ == '__main__':
     set_seed(142)
     
     # Choose model architecture and dataset
-    args.arch = 'tanet'  # videoswintransformer, tanet
+    args.arch = 'videoswintransformer'  # videoswintransformer, tanet
     args.dataset = 'ucf101'
 
     # Map dataset names to directory names
@@ -220,6 +220,8 @@ if __name__ == '__main__':
         elif args.arch == 'videoswintransformer' and args.dataset == 'ucf101':
             # Use SSv2 Swin stats on UCF run
             args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ss2/source_statistics_swin_dwt3d/dwt_3d_haar_subband_stats_L1_20250904_231614.npz'
+        else:
+            raise ValueError(f"Unsupported architecture/dataset combination: {args.arch}/{args.dataset}")
 
     if not os.path.exists(args.dwt_stats_npz_file):
         print(f"[WARN] Subband stats NPZ not found for transform={transform}: {args.dwt_stats_npz_file}")
