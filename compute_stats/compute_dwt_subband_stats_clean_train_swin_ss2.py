@@ -37,18 +37,25 @@ if __name__ == '__main__':
     args.evaluate_baselines = not args.tta
     args.baseline = 'source'
 
-    # Request DWT subband statistics computation
+    # Request DWT subband statistics computation (DWT only)
     args.compute_stat = 'dwt_subbands'
+    args.subband_transform = 'dwt'
+    args.dwt_wavelet = 'haar'  # always use Haar
 
     # DWT alignment parameters for stats extraction
     # K levels for deepest subbands; must match what you'll use at TTA time
     args.dwt_align_levels = 1
+    # Toggle 3D vs 2D DWT by setting this flag
+    args.dwt_align_3d = True  # uncomment to use 3D (T,H,W) DWT
 
     args.n_augmented_views = None
     args.n_epoch_adapat = 1
 
     args.corruptions = 'clean'
-    args.result_dir = f'/scratch/project_465001897/datasets/ss2/source_statistics_swin_dwt'
+    # Adapt result_dir based on 2D vs 3D DWT (no wavelet in path)
+    base_stats_dir = '/scratch/project_465001897/datasets/ss2'
+    subdir = 'source_statistics_swin_dwt3d' if getattr(args, 'dwt_align_3d', False) else 'source_statistics_swin_dwt'
+    args.result_dir = os.path.join(base_stats_dir, subdir)
     eval(args=args, )
 
 

@@ -272,13 +272,16 @@ def compute_dwt_subband_statistics(model=None, args=None, logger=None, log_time=
     class ComputeDWTSubbandStatsHook:
         def __init__(self, module, clip_len, dwt_levels, before_norm=False,
                      if_sample_tta_aug_views=False, n_augmented_views=1,
-                     subband_transform: str = 'dwt'):
+                     subband_transform: str = 'dwt', dwt_3d: bool = False,
+                     wavelet: str = 'haar'):
             self.clip_len = clip_len
             self.dwt_levels = max(1, int(dwt_levels))
             self.before_norm = before_norm
             self.if_sample_tta_aug_views = if_sample_tta_aug_views
             self.n_augmented_views = n_augmented_views
             self.subband_transform = str(subband_transform).lower()
+            self.dwt_3d = bool(dwt_3d)
+            self.wavelet = str(wavelet).lower()
             self.hook = module.register_forward_hook(self.hook_fn)
             self.results = {b: {'mean': None, 'var': None} for b in bands}
 
@@ -309,21 +312,67 @@ def compute_dwt_subband_statistics(model=None, args=None, logger=None, log_time=
 
                 # Apply selected transform
                 if self.subband_transform == 'dwt':
-                    LL, LH, HL, HH = CombineNormStatsRegHook_DWT._dwt2d_multi_level(feat, self.dwt_levels)
+                    if self.dwt_3d:
+                        # 3D DWT returns 8 subbands; group to 4 bands. Supports 'haar' and 'db2'.
+                        LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH = CombineNormStatsRegHook_DWT._dwt3d_multi_level(
+                            feat, self.dwt_levels, wavelet=self.wavelet
+                        )
+                        subband_groups = {
+                            'LL': [LLL, HLL],
+                            'LH': [LLH, HLH],
+                            'HL': [LHL, HHL],
+                            'HH': [LHH, HHH],
+                        }
+                    else:
+                        LL, LH, HL, HH = CombineNormStatsRegHook_DWT._dwt2d_multi_level(feat, self.dwt_levels, wavelet=self.wavelet)
+                        subband_groups = {'LL': [LL], 'LH': [LH], 'HL': [HL], 'HH': [HH]}
                 elif self.subband_transform == 'fft':
-                    LL, LH, HL, HH = CombineNormStatsRegHook_DWT._fft2d_level1(feat)
+                    if self.dwt_3d:
+                        LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH = CombineNormStatsRegHook_DWT._fft3d_level1(feat)
+                        subband_groups = {
+                            'LL': [LLL, HLL],
+                            'LH': [LLH, HLH],
+                            'HL': [LHL, HHL],
+                            'HH': [LHH, HHH],
+                        }
+                    else:
+                        LL, LH, HL, HH = CombineNormStatsRegHook_DWT._fft2d_level1(feat)
+                        subband_groups = {'LL': [LL], 'LH': [LH], 'HL': [HL], 'HH': [HH]}
                 elif self.subband_transform == 'dct':
-                    LL, LH, HL, HH = CombineNormStatsRegHook_DWT._dct2d_level1(feat)
+                    if self.dwt_3d:
+                        LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH = CombineNormStatsRegHook_DWT._dct3d_level1(feat)
+                        subband_groups = {
+                            'LL': [LLL, HLL],
+                            'LH': [LLH, HLH],
+                            'HL': [LHL, HHL],
+                            'HH': [LHH, HHH],
+                        }
+                    else:
+                        LL, LH, HL, HH = CombineNormStatsRegHook_DWT._dct2d_level1(feat)
+                        subband_groups = {'LL': [LL], 'LH': [LH], 'HL': [HL], 'HH': [HH]}
                 else:
                     raise ValueError(f"Unknown subband_transform: {self.subband_transform}")
-                subband_tensors = {'LL': LL, 'LH': LH, 'HL': HL, 'HH': HH}
+                # Concatenate grouped tensors along batch dim for stats
+                subband_tensors = {}
+                for b in bands:
+                    tensors = [t for t in subband_groups[b] if t is not None]
+                    if len(tensors) == 1:
+                        subband_tensors[b] = tensors[0]
+                    elif len(tensors) > 1:
+                        subband_tensors[b] = torch.cat(tensors, dim=0)
+                    else:
+                        subband_tensors[b] = None
                 for b in bands:
                     sb = subband_tensors[b]
-                    c = sb.shape[1]
-                    mean_c = sb.mean(dim=(0, 2, 3, 4))  # (C,)
-                    var_c = sb.permute(1, 0, 2, 3, 4).contiguous().view(c, -1).var(1, unbiased=False)
-                    self.results[b]['mean'] = mean_c
-                    self.results[b]['var'] = var_c
+                    if sb is None:
+                        self.results[b]['mean'] = None
+                        self.results[b]['var'] = None
+                    else:
+                        c = sb.shape[1]
+                        mean_c = sb.mean(dim=(0, 2, 3, 4))  # (C,)
+                        var_c = sb.permute(1, 0, 2, 3, 4).contiguous().view(c, -1).var(1, unbiased=False)
+                        self.results[b]['mean'] = mean_c
+                        self.results[b]['var'] = var_c
             except Exception:
                 # If shape too small for the requested levels, leave results as None
                 for b in bands:
@@ -348,6 +397,8 @@ def compute_dwt_subband_statistics(model=None, args=None, logger=None, log_time=
             if_sample_tta_aug_views=getattr(args, 'if_sample_tta_aug_views', False),
             n_augmented_views=getattr(args, 'n_augmented_views', 1),
             subband_transform=getattr(args, 'subband_transform', 'dwt'),
+            dwt_3d=getattr(args, 'dwt_align_3d', False),
+            wavelet=getattr(args, 'dwt_wavelet', 'haar'),
         )
         compute_stat_hooks.append(hook)
         for b in bands:
@@ -419,14 +470,20 @@ def compute_dwt_subband_statistics(model=None, args=None, logger=None, log_time=
                 out[f'{b}_mean'].append(None)
                 out[f'{b}_var'].append(None)
 
-    # Enforce constraints for FFT/DCT: only 2D, level-1
+    # Enforce constraints for FFT/DCT: only level-1; append 3D tag if requested
     transform = getattr(args, 'subband_transform', 'dwt')
+    is_3d = bool(getattr(args, 'dwt_align_3d', False))
+    wavelet = str(getattr(args, 'dwt_wavelet', 'haar')).lower()
     if transform in ['fft', 'dct']:
         if getattr(args, 'dwt_align_levels', 1) != 1 and logger is not None:
             logger.warning(f"{transform.upper()} subband stats: forcing level-1 for saving; stats computed at requested level but saved as L1")
     # Save NPZ matching TTA loader expectations
     levels = getattr(args, 'dwt_align_levels', 1)
-    prefix = f"{transform}_subband_stats_L{1 if transform in ['fft','dct'] else levels}"
+    level_tag = 1 if transform in ['fft','dct'] else levels
+    if transform == 'dwt':
+        prefix = f"{transform}{'_3d' if is_3d else ''}_{wavelet}_subband_stats_L{level_tag}"
+    else:
+        prefix = f"{transform}{'_3d' if is_3d else ''}_subband_stats_L{level_tag}"
     save_path = osp.join(args.result_dir, f'{prefix}_{log_time}.npz')
     np.savez(
         save_path,

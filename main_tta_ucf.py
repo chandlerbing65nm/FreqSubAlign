@@ -92,7 +92,7 @@ def get_model_config(arch, dataset='somethingv2', tta_mode=True):
                         **config['additional_args'],
                         'lr': 5e-5,
                         # DWT subband stats for videoswin - ss2
-                        'dwt_stats_npz_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt/dwt_subband_stats_L1_20250825_134144.npz',
+                        'dwt_stats_npz_file': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt_haar/dwt_haar_subband_stats_L1_20250904_230408.npz',
                     }
                 })
     
@@ -145,35 +145,81 @@ if __name__ == '__main__':
 
     args.n_augmented_views = 2
     args.if_sample_tta_aug_views = True
+    # args.lambda_pred_consis = 0.0
     args.batch_size = 1
     args.n_epoch_adapat = 1
 
     # args.tsn_style = True
     # ========================= New Arguments ==========================
-    args.corruption_list = 'random' # mini, full, continual, random, continual_alternate
+    args.corruption_list = 'continual' # mini, full, continual, random, continual_alternate
 
     # DWT/FFT/DCT subband alignment hook
     args.dwt_align_enable = True
     # args.dwt_align_adaptive_lambda = True
-    # args.dwt_align_3d = True
+    args.dwt_align_3d = True
     args.dwt_align_levels = 1  # must match the NPZ, up to 2 only
     args.subband_transform = 'dwt' # 'dwt' (default), 'fft', or 'dct'
-    args.dwt_wavelet = 'haar' # haar , db4
+    args.dwt_wavelet = 'haar' # haar , db2
+    args.cross_dwt_stats = True
 
-    # Select transform-specific stats NPZ based on existing DWT path if needed
+    # Select transform-specific stats NPZ
     transform = getattr(args, 'subband_transform', 'dwt')
-    if hasattr(args, 'dwt_stats_npz_file') and isinstance(args.dwt_stats_npz_file, str) and args.dwt_stats_npz_file:
-        npz_path = args.dwt_stats_npz_file
-        if transform =='dct':
-            # Heuristically adapt directory and filename from DWT to FFT/DCT
-            npz_path = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dct/dct_subband_stats_L1_20250903_173009.npz'
-        elif transform =='fft':
-            npz_path = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_fft/fft_subband_stats_L1_20250903_184842.npz'
-        
-        if npz_path != args.dwt_stats_npz_file:
-            args.dwt_stats_npz_file = npz_path
-    else:
-        args.dwt_stats_npz_file = ''
+    if args.dwt_align_enable:
+        if args.arch == 'tanet' and args.dataset == 'ucf101' and getattr(args, 'dwt_align_3d', False):
+            # Use provided 3D TANet UCF NPZs
+            if transform == 'dwt':
+                wavelet = str(getattr(args, 'dwt_wavelet', 'haar')).lower()
+                if wavelet == 'db2':
+                    args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt3d_db2/dwt_3d_db2_subband_stats_L1_20250905_150136.npz'
+                else:
+                    args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt3d/dwt_3d_subband_stats_L1_20250904_224141.npz'
+            else:
+                npz_map = {
+                    'fft': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_fft3d/fft_3d_subband_stats_L1_20250904_233834.npz',
+                    'dct': '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dct3d/dct_3d_subband_stats_L1_20250904_224352.npz',
+                }
+                args.dwt_stats_npz_file = npz_map.get(transform, '')
+        elif args.arch == 'tanet' and args.dataset == 'ucf101' and not getattr(args, 'dwt_align_3d', False) and transform == 'dwt':
+            # Use provided 2D TANet UCF NPZs for DWT based on wavelet
+            wavelet = str(getattr(args, 'dwt_wavelet', 'haar')).lower()
+            if wavelet == 'haar':
+                args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt_haar/dwt_haar_subband_stats_L1_20250904_230408.npz'
+            elif wavelet == 'db2':
+                args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt_db2/dwt_db2_subband_stats_L1_20250904_230058.npz'
+            else:
+                raise ValueError('db1(haar), db2, db4 not found')
+        elif args.arch == 'tanet' and args.dataset == 'ucf101' and transform in ['fft', 'dct']:
+            # Fallback: retain previous behavior if a path was provided; otherwise empty
+            if hasattr(args, 'dwt_stats_npz_file') and isinstance(args.dwt_stats_npz_file, str) and args.dwt_stats_npz_file:
+                npz_path = args.dwt_stats_npz_file
+                if transform == 'dct':
+                    npz_path = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dct/dct_subband_stats_L1_20250903_173009.npz'
+                elif transform == 'fft':
+                    npz_path = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_fft/fft_subband_stats_L1_20250904_234259.npz'
+                if npz_path != args.dwt_stats_npz_file:
+                    args.dwt_stats_npz_file = npz_path
+            else:
+                args.dwt_stats_npz_file = ''
+        elif args.arch == 'videoswintransformer' and args.dataset == 'ucf101' and args.dwt_align_3d and transform in ['dwt']:
+            # Fallback: retain previous behavior if a path was provided; otherwise empty
+            args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_swin_dwt3d/dwt_3d_haar_subband_stats_L1_20250904_231043.npz'
+
+    # Cross-dataset DWT stats ablation: use stats from a different training dataset within same arch
+    # Enable via args.cross_dwt_stats = True
+    if getattr(args, 'cross_dwt_stats', False):
+        # Enforce requested alignment settings
+        args.dwt_align_enable = True
+        args.dwt_align_3d = True
+        args.subband_transform = 'dwt'
+        args.dwt_align_levels = 1
+        args.dwt_wavelet = 'haar'
+        # Mapping per arch/dataset
+        if args.arch == 'tanet' and args.dataset == 'ucf101':
+            # Use SSv2 TANet stats on UCF run
+            args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ss2/source_statistics_tanet_dwt3d/dwt_3d_haar_subband_stats_L1_20250904_231338.npz'
+        elif args.arch == 'videoswintransformer' and args.dataset == 'ucf101':
+            # Use SSv2 Swin stats on UCF run
+            args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ss2/source_statistics_swin_dwt3d/dwt_3d_haar_subband_stats_L1_20250904_231614.npz'
 
     if not os.path.exists(args.dwt_stats_npz_file):
         print(f"[WARN] Subband stats NPZ not found for transform={transform}: {args.dwt_stats_npz_file}")
@@ -185,9 +231,6 @@ if __name__ == '__main__':
     args.dwt_align_lambda_hl = 1.0
     args.dwt_align_lambda_hh = 1.0
 
-    if args.dwt_align_3d == True and args.arch == 'tanet':
-        args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt/dwt_subband_stats_L1_20250828_171707.npz'
-    
     if args.dwt_align_levels == 2 and args.dwt_align_3d == False and args.arch == 'tanet':
         args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt/dwt_subband_stats_L2_20250828_163634.npz'
 
@@ -250,6 +293,11 @@ if __name__ == '__main__':
         suffix += "_bnaffine"
     suffix += f"_corruption={args.corruption_list}"
     suffix += f"_bs{args.batch_size}"
+    # Include base alignment lambda for reproducibility
+    suffix += f"_lambdaBase{getattr(args, 'lambda_base_align', 1.0)}"
+    # Mark cross-dataset stats ablation if used
+    if getattr(args, 'cross_dwt_stats', False):
+        suffix += "_crossDWT"
     args.result_suffix = suffix
 
     # Set up corruption types to evaluate

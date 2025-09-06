@@ -224,6 +224,34 @@ class CombineNormStatsRegHook_DWT():
         return kLLL, kLLH, kLHL, kLHH, kHLL, kHLH, kHHL, kHHH
 
     @staticmethod
+    def _wavelet3d_kernels(device, wavelet: str, dtype):
+        """
+        Return tuple of 3D separable analysis kernels for given wavelet over (T,H,W):
+        [LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH]. Supports 'haar' and 'db2'.
+        """
+        wavelet = str(wavelet).lower()
+        if wavelet == 'haar':
+            return CombineNormStatsRegHook_DWT._haar_kernels3d(device)
+        elif wavelet == 'db2':
+            # Build 1D low/high filters and form all 3D outer products
+            h, g = CombineNormStatsRegHook_DWT._db2_filters(device, dtype)
+            def outer3(a, b, c):
+                return a[:, None, None] * b[None, :, None] * c[None, None, :]
+            kLLL = outer3(h, h, h)
+            kLLH = outer3(h, h, g)
+            kLHL = outer3(h, g, h)
+            kLHH = outer3(h, g, g)
+            kHLL = outer3(g, h, h)
+            kHLH = outer3(g, h, g)
+            kHHL = outer3(g, g, h)
+            kHHH = outer3(g, g, g)
+            # Normalize for energy preservation approximately (stride-2 downsample)
+            # db2 filters are orthonormal in 1D; separable 3D conv with stride 2 implicitly handles scale.
+            return kLLL, kLLH, kLHL, kLHH, kHLL, kHLH, kHHL, kHHH
+        else:
+            raise ValueError(f"Unsupported 3D wavelet: {wavelet}")
+
+    @staticmethod
     def _db2_filters(device, dtype=None):
         """
         Return 1D db2 (Daubechies-2, 4-tap) analysis filters (low-pass and high-pass).
@@ -340,7 +368,7 @@ class CombineNormStatsRegHook_DWT():
         xt = x.permute(0, 2, 1, 3, 4).contiguous().view(N * T, C, H, W)
         if hasattr(torch.fft, 'dct'):
             # Apply DCT-II along H then W (ortho normalization for energy preservation)
-            coeff = torch.fft.dct(torch.fft.dct(xt, type=2, dim=-2, norm='ortho'), type=2, dim=-1, norm='ortho')
+            coeff = torch.fft.dct(torch.fft.dct(xt, type=2, dim=-2, norm='forward'), type=2, dim=-1, norm='forward')
         else:
             # Fallback using separable orthonormal DCT matrices
             Dh = _get_dct_matrix(H, xt.device, xt.dtype)  # (H,H)
@@ -368,7 +396,7 @@ class CombineNormStatsRegHook_DWT():
         N, C, T, H, W = x.shape
         # Flatten N,C to batch for efficiency
         X = x.view(N * C, T, H, W)
-        spec = torch.fft.fftn(X, dim=(-3, -2, -1), norm='ortho')
+        spec = torch.fft.fftn(X, dim=(-3, -2, -1), norm='forward')
         mag = torch.abs(spec)
         t2, h2, w2 = T // 2, H // 2, W // 2
         qLLL = mag[:, 0:t2, 0:h2, 0:w2]
@@ -416,9 +444,9 @@ class CombineNormStatsRegHook_DWT():
         N, C, T, H, W = x.shape
         if hasattr(torch.fft, 'dct'):
             X = x
-            X = torch.fft.dct(X, type=2, dim=-3, norm='ortho')
-            X = torch.fft.dct(X, type=2, dim=-2, norm='ortho')
-            coeff = torch.fft.dct(X, type=2, dim=-1, norm='ortho')
+            X = torch.fft.dct(X, type=2, dim=-3, norm='forward')
+            X = torch.fft.dct(X, type=2, dim=-2, norm='forward')
+            coeff = torch.fft.dct(X, type=2, dim=-1, norm='forward')
         else:
             # Fallback: apply separable DCT via cached matrices
             X = x
@@ -437,7 +465,7 @@ class CombineNormStatsRegHook_DWT():
         return cLLL.contiguous(), cLLH.contiguous(), cLHL.contiguous(), cLHH.contiguous(), cHLL.contiguous(), cHLH.contiguous(), cHHL.contiguous(), cHHH.contiguous()
 
     @staticmethod
-    def _dwt3d_multi_level(x, levels: int):
+    def _dwt3d_multi_level(x, levels: int, wavelet: str = 'haar'):
         """
         x: (N, C, T, H, W)
         returns deepest level 3D subbands each (N, C, T/2^L, H/2^L, W/2^L)
@@ -448,7 +476,8 @@ class CombineNormStatsRegHook_DWT():
         subbands = None
         for _ in range(levels):
             device = cur.device
-            kLLL, kLLH, kLHL, kLHH, kHLL, kHLH, kHHL, kHHH = CombineNormStatsRegHook_DWT._haar_kernels3d(device)
+            # Select 3D wavelet kernels based on requested wavelet
+            kLLL, kLLH, kLHL, kLHH, kHLL, kHLH, kHHL, kHHH = CombineNormStatsRegHook_DWT._wavelet3d_kernels(device, wavelet, cur.dtype)
             # Stack kernels -> (8, 2, 2, 2)
             base = torch.stack([kLLL, kLLH, kLHL, kLHH, kHLL, kHLH, kHHL, kHHH], dim=0)
             weight = base.unsqueeze(1)  # (8,1,2,2,2)
@@ -524,14 +553,10 @@ class CombineNormStatsRegHook_DWT():
 
         # Apply selected subband transform
         if self.subband_transform == 'dwt':
-            # DWT: support 3D or 2D multi-level
+            # DWT: support 3D or 2D multi-level with selectable wavelet ('haar', 'db2' for 3D)
             if self.dwt_3d:
-                if self.wavelet != 'haar':
-                    # db4 3D not implemented; fall back to Haar with one-time warn
-                    if not hasattr(self, '_warned_db4_3d'):
-                        print('[WARN] dwt_wavelet!=haar with dwt_align_3d=True: falling back to Haar 3D DWT')
-                        self._warned_db4_3d = True
-                LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH = self._dwt3d_multi_level(feat, self.dwt_levels)
+                # For 3D, support 'haar' and 'db2' kernels
+                LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH = self._dwt3d_multi_level(feat, self.dwt_levels, wavelet=self.wavelet)
                 grouped = {
                     'LL': [LLL, HLL],
                     'LH': [LLH, HLH],

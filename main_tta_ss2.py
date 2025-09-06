@@ -107,7 +107,7 @@ if __name__ == '__main__':
     set_seed(142)
     
     # Choose model architecture and dataset
-    args.arch = 'videoswintransformer'  # videoswintransformer, tanet
+    args.arch = 'tanet'  # videoswintransformer, tanet
     args.dataset = 'somethingv2'
 
     # Map dataset names to directory names
@@ -119,7 +119,7 @@ if __name__ == '__main__':
     dataset_dir = dataset_to_dir.get(args.dataset, args.dataset)
 
     # Choose evaluation mode (TTA or source-only)
-    args.tta = False  # Set to False for source-only evaluation
+    args.tta = True  # Set to False for source-only evaluation
     
     # Get model configuration based on architecture and dataset
     model_config = get_model_config(args.arch, args.dataset, tta_mode=args.tta)
@@ -150,24 +150,48 @@ if __name__ == '__main__':
 
     # ========================= New Arguments ==========================
     args.corruption_list = 'continual' # mini, full, continual, random, continual_alternate
-    # args.dwt_preprocessing = True
-    # args.dwt_component = 'LL'
-    # args.dwt_levels = 1
 
-    # # DWT subband alignment hook
-    # args.dwt_align_enable = True
+    # DWT subband alignment hook
+    args.dwt_align_enable = True
     # args.dwt_align_adaptive_lambda = True
-    # args.dwt_align_3d = True
-    # args.dwt_align_levels = 1  # must match the NPZ
+    args.dwt_align_3d = True
+    args.dwt_align_levels = 1  # must match the NPZ
+    args.subband_transform = 'dwt'
+    args.cross_dwt_stats = True
 
-    # if not os.path.exists(args.dwt_stats_npz_file):
-    #     print(f"[WARN] DWT stats NPZ not found: {args.dwt_stats_npz_file}")
+    if not os.path.exists(args.dwt_stats_npz_file):
+        print(f"[WARN] DWT stats NPZ not found: {args.dwt_stats_npz_file}")
 
-    # # Choose alignment weights
-    # args.dwt_align_lambda_ll = 1.0
-    # args.dwt_align_lambda_lh = 1.0
-    # args.dwt_align_lambda_hl = 1.0
-    # args.dwt_align_lambda_hh = 1.0
+    # Choose alignment weights
+    args.lambda_base_align = 1.0
+    args.dwt_align_lambda_ll = 1.0
+    args.dwt_align_lambda_lh = 1.0
+    args.dwt_align_lambda_hl = 1.0
+    args.dwt_align_lambda_hh = 1.0
+
+    if args.arch == 'videoswintransformer' and args.dataset == 'somethingv2' and args.dwt_align_3d and args.subband_transform in ['dwt']:
+        # Default (same-dataset) stats
+        args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ss2/source_statistics_swin_dwt3d/dwt_3d_haar_subband_stats_L1_20250904_231614.npz'
+    elif args.arch == 'tanet' and args.dataset == 'somethingv2' and args.dwt_align_3d and args.subband_transform in ['dwt']:
+        # Default (same-dataset) stats
+        args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ss2/source_statistics_tanet_dwt3d/dwt_3d_haar_subband_stats_L1_20250904_231338.npz'
+
+    # Cross-dataset DWT stats ablation for SSv2 entry: use stats from a different training dataset within same arch
+    # Enable via args.cross_dwt_stats = True
+    if getattr(args, 'cross_dwt_stats', False):
+        # Enforce requested alignment settings
+        args.dwt_align_enable = True
+        args.dwt_align_3d = True
+        args.subband_transform = 'dwt'
+        args.dwt_align_levels = 1
+        # haar is default for these provided files
+        # Mapping per arch/dataset
+        if args.arch == 'tanet' and args.dataset == 'somethingv2':
+            # Use UCF TANet stats on SSv2 run
+            args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt3d/dwt_3d_subband_stats_L1_20250904_224141.npz'
+        elif args.arch == 'videoswintransformer' and args.dataset == 'somethingv2':
+            # Use UCF Swin stats on SSv2 run
+            args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_swin_dwt3d/dwt_3d_haar_subband_stats_L1_20250904_231043.npz'
 
     # ============================================================================================
 
@@ -212,6 +236,9 @@ if __name__ == '__main__':
         suffix += "_bnaffine"
     suffix += f"_corruption={args.corruption_list}"
     suffix += f"_bs{args.batch_size}"
+    # Mark cross-dataset stats ablation if used
+    if getattr(args, 'cross_dwt_stats', False):
+        suffix += "_crossDWT"
     args.result_suffix = suffix
 
     # Set up corruption types to evaluate
