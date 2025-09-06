@@ -106,7 +106,7 @@ if __name__ == '__main__':
     set_seed(142)
     
     # Choose model architecture and dataset
-    args.arch = 'videoswintransformer'  # videoswintransformer, tanet
+    args.arch = 'tanet'  # videoswintransformer, tanet
     args.dataset = 'ucf101'
 
     # Map dataset names to directory names
@@ -151,7 +151,7 @@ if __name__ == '__main__':
 
     # args.tsn_style = True
     # ========================= New Arguments ==========================
-    args.corruption_list = 'continual' # mini, full, continual, random, continual_alternate
+    args.corruption_list = 'continual_alternate' # mini, full, continual, random, continual_alternate
 
     # DWT/FFT/DCT subband alignment hook
     args.dwt_align_enable = True
@@ -160,7 +160,7 @@ if __name__ == '__main__':
     args.dwt_align_levels = 1  # must match the NPZ, up to 2 only
     args.subband_transform = 'dwt' # 'dwt' (default), 'fft', or 'dct'
     args.dwt_wavelet = 'haar' # haar , db2
-    args.cross_dwt_stats = True
+    # args.cross_dwt_stats = True
 
     # Select transform-specific stats NPZ
     transform = getattr(args, 'subband_transform', 'dwt')
@@ -261,7 +261,7 @@ if __name__ == '__main__':
         # Source-only evaluation parameters
         # args.test_crops = 1
         args.evaluate_baselines = True
-        args.baseline = 'shot' # source, shot, tent, dua, rem, t3a, norm
+        args.baseline = 'norm' # source, shot, tent, dua, t3a, norm
         args.t3a_filter_k = 100
         suffix = f'baseline={args.baseline}'
 
@@ -318,6 +318,7 @@ if __name__ == '__main__':
         ]
     elif getattr(args, 'corruption_list', 'full') == 'continual_alternate':
         corruptions = [
+            # 'alternate_gauss',
             'continual_alternate',
         ]
     elif getattr(args, 'corruption_list', 'full') == 'continual':

@@ -154,10 +154,10 @@ if __name__ == '__main__':
     # DWT subband alignment hook
     args.dwt_align_enable = True
     # args.dwt_align_adaptive_lambda = True
-    args.dwt_align_3d = True
+    # args.dwt_align_3d = True
     args.dwt_align_levels = 1  # must match the NPZ
     args.subband_transform = 'dwt'
-    args.cross_dwt_stats = True
+    # args.cross_dwt_stats = True
 
     if args.arch == 'videoswintransformer' and args.dataset == 'somethingv2' and args.dwt_align_3d and args.subband_transform in ['dwt']:
         # Default (same-dataset) stats
