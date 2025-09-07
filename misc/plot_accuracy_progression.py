@@ -35,11 +35,23 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import matplotlib.pyplot as plt
+from cycler import cycler
+
+# Global plotting style: thicker lines and distinctive colors
+# Use the tab10 palette (10 high-contrast colors). If more are needed, it will cycle.
+PALETTE = list(plt.cm.tab10.colors)
+plt.rcParams["lines.linewidth"] = 2.8
+plt.rcParams["axes.prop_cycle"] = cycler(color=PALETTE)
+plt.rcParams["axes.linewidth"] = 1.2
+plt.rcParams["grid.linewidth"] = 0.9
+plt.rcParams["legend.framealpha"] = 0.9
 
 # Regex to capture step markers and metrics from different log styles
 # 1) TTA style: "TTA Epoch1: [4/3783] ..."
 RE_STEP_TTA = re.compile(r"TTA\s+Epoch(\d+):\s*\[(\d+)/(\d+)\]")
-# 2) Baseline validate style: "Test: [4/3783] ..."
+# 2) Baseline validate style with explicit epoch: "Test Epoch 37: [4/3783] ..."
+RE_STEP_TEST_EPOCH = re.compile(r"Test\s+Epoch\s+(\d+):\s*\[(\d+)/(\d+)\]")
+# 3) Baseline validate style without epoch: "Test: [4/3783] ..."
 RE_STEP_TEST = re.compile(r"Test:\s*\[(\d+)/(\d+)\]")
 # Flexible float (supports integers and scientific notation)
 _FLOAT = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
@@ -82,17 +94,22 @@ def parse_log_lines(lines: List[str]) -> Dict[str, Any]:
 
     gstep = 0
     for line in lines:
-            # Anchor on step marker. Support both TTA and baseline validate formats.
+            # Anchor on step marker. Support TTA, Test Epoch, and Test formats.
             m_tta = RE_STEP_TTA.search(line)
             if m_tta:
                 ep = int(m_tta.group(1))
                 i = int(m_tta.group(2))
             else:
-                m_test = RE_STEP_TEST.search(line)
-                if not m_test:
-                    continue
-                ep = -1
-                i = int(m_test.group(1))
+                m_test_epoch = RE_STEP_TEST_EPOCH.search(line)
+                if m_test_epoch:
+                    ep = int(m_test_epoch.group(1))
+                    i = int(m_test_epoch.group(2))
+                else:
+                    m_test = RE_STEP_TEST.search(line)
+                    if not m_test:
+                        continue
+                    ep = -1
+                    i = int(m_test.group(1))
 
             # Accuracies: parse independently, allow missing
             m_p1 = RE_P1.search(line)
@@ -240,7 +257,10 @@ def make_plot(
     metric: str = "avg",
     title: str | None = None,
     out_path: Path | None = None,
+    fig_scale: float = 1.0,
 ) -> None:
+    def _scale(sz: tuple[float, float]) -> tuple[float, float]:
+        return (sz[0] * fig_scale, sz[1] * fig_scale)
     # Choose which series to plot
     if metric == "avg":
         y1_top1, y1_top5 = data1["top1_avg"], data1["top5_avg"]
@@ -256,7 +276,7 @@ def make_plot(
     x1 = data1["step"]
     x2 = data2["step"]
 
-    fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    fig, axes = plt.subplots(2, 1, figsize=_scale((10, 8)), sharex=True)
 
     # Top-1 subplot
     ax = axes[0]
@@ -298,6 +318,7 @@ def make_plot_selected_multi(
     metric: str = "avg",
     title: str | None = None,
     out_path: Path | None = None,
+    fig_scale: float = 1.0,
 ) -> None:
     """Render only the requested subplots for N runs (N >= 1).
 
@@ -325,7 +346,8 @@ def make_plot_selected_multi(
     if n_rows == 0:
         print("No plots selected; nothing to render.")
         return
-    fig, axes = plt.subplots(n_rows, 1, figsize=(11, max(3 * n_rows, 5)), sharex=True)
+    base_h = max(3 * n_rows, 5)
+    fig, axes = plt.subplots(n_rows, 1, figsize=(11 * fig_scale, base_h * fig_scale), sharex=True)
     if n_rows == 1:
         axes = [axes]
 
@@ -404,6 +426,7 @@ def make_plot_top1_and_error_multi(
     metric: str = "avg",
     title: str | None = None,
     out_path: Path | None = None,
+    fig_scale: float = 1.0,
 ) -> None:
     """Create a 2-row figure comparing Top-1 accuracy and Top-1 error for N runs (N>=2)."""
     assert len(data_list) == len(labels) and len(data_list) >= 2
@@ -419,7 +442,7 @@ def make_plot_top1_and_error_multi(
 
     steps = [d["step"] for d in data_list]
 
-    fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+    fig, axes = plt.subplots(2, 1, figsize=(10 * fig_scale, 7 * fig_scale), sharex=True)
 
     # Top-1 Accuracy
     ax = axes[0]
@@ -513,6 +536,7 @@ def make_plot_selected_compare(
     metric: str = "avg",
     title: str | None = None,
     out_path: Path | None = None,
+    fig_scale: float = 1.0,
 ) -> None:
     """Render only the requested subplots for two runs.
 
@@ -540,7 +564,8 @@ def make_plot_selected_compare(
     if n_rows == 0:
         print("No plots selected; nothing to render.")
         return
-    fig, axes = plt.subplots(n_rows, 1, figsize=(10, max(3 * n_rows, 5)), sharex=True)
+    base_h = max(3 * n_rows, 5)
+    fig, axes = plt.subplots(n_rows, 1, figsize=(10 * fig_scale, base_h * fig_scale), sharex=True)
     if n_rows == 1:
         axes = [axes]
 
@@ -622,6 +647,7 @@ def make_plot_selected_single(
     metric: str = "avg",
     title: str | None = None,
     out_path: Path | None = None,
+    fig_scale: float = 1.0,
 ) -> None:
     """Render only the requested subplots for a single run."""
     if metric == "avg":
@@ -711,6 +737,7 @@ def make_plot_single(
     metric: str = "avg",
     title: str | None = None,
     out_path: Path | None = None,
+    fig_scale: float = 1.0,
 ) -> None:
     # Choose series
     if metric == "avg":
@@ -728,7 +755,7 @@ def make_plot_single(
 
     x = data["step"]
 
-    fig, axes = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
+    fig, axes = plt.subplots(3, 1, figsize=(10 * fig_scale, 10 * fig_scale), sharex=True)
 
     # Top-1/Top-5
     ax = axes[0]
@@ -788,6 +815,7 @@ def make_plot_compare_full(
     metric: str = "avg",
     title: str | None = None,
     out_path: Path | None = None,
+    fig_scale: float = 1.0,
 ) -> None:
     """Compare two runs in one figure: accuracies, losses, confidences.
 
@@ -824,7 +852,7 @@ def make_plot_compare_full(
 
     # Build figure
     n_rows = 4
-    fig, axes = plt.subplots(n_rows, 1, figsize=(11, 12), sharex=True)
+    fig, axes = plt.subplots(n_rows, 1, figsize=(11 * fig_scale, 12 * fig_scale), sharex=True)
 
     # Top-1
     ax = axes[0]
@@ -901,6 +929,7 @@ def make_plot_top1_and_error_compare(
     metric: str = "avg",
     title: str | None = None,
     out_path: Path | None = None,
+    fig_scale: float = 1.0,
 ) -> None:
     """Create a 2-row figure comparing Top-1 accuracy and Top-1 error for two runs.
 
@@ -979,6 +1008,12 @@ def main():
         help="Select one or more subplots to render: acc1 err1 loss_reg loss_consis acc5 err5. If omitted, default behavior is used.",
     )
     parser.add_argument(
+        "--figscale",
+        type=float,
+        default=1.0,
+        help="Scale factor applied to figure size (e.g., 1.5 for 50% larger figures).",
+    )
+    parser.add_argument(
         "--max_steps",
         type=int,
         default=None,
@@ -996,9 +1031,15 @@ def main():
         if not dirp.exists() or not dirp.is_dir():
             print(f"Error: directory not found: {dirp}", file=sys.stderr)
             sys.exit(1)
-        file_paths = sorted([p for p in dirp.glob("*.txt") if p.is_file()])
+        # Accept both .txt and .out files
+        txts = [p for p in dirp.glob("*.txt") if p.is_file()]
+        outs = [p for p in dirp.glob("*.out") if p.is_file()]
+        file_paths = sorted(txts + outs)
         if len(file_paths) < 2:
-            print(f"Error: --dir must contain at least two .txt files (found {len(file_paths)})", file=sys.stderr)
+            print(
+                f"Error: --dir must contain at least two .txt/.out files (found {len(file_paths)})",
+                file=sys.stderr,
+            )
             sys.exit(1)
     else:
         # Backward compatibility: --file1 (and optional --file2)
@@ -1094,6 +1135,7 @@ def main():
                     metric=args.metric,
                     title=title,
                     out_path=out_path,
+                    fig_scale=args.figscale,
                 )
             else:
                 if len(d_list) == 1:
@@ -1103,6 +1145,7 @@ def main():
                         metric=args.metric,
                         title=title,
                         out_path=out_path,
+                        fig_scale=args.figscale,
                     )
                 elif len(d_list) == 2:
                     title = args.title if args.title else f"{noise} — {labels[0]} vs {labels[1]}"
@@ -1114,6 +1157,7 @@ def main():
                         metric=args.metric,
                         title=title,
                         out_path=out_path,
+                        fig_scale=args.figscale,
                     )
                 else:
                     title = args.title if args.title else f"{noise} — " + " vs ".join(labels)
@@ -1123,6 +1167,7 @@ def main():
                         metric=args.metric,
                         title=title,
                         out_path=out_path,
+                        fig_scale=args.figscale,
                     )
             produced_any = True
         if produced_any:
@@ -1139,6 +1184,7 @@ def main():
             metric=args.metric,
             title=title,
             out_path=out_path,
+            fig_scale=args.figscale,
         )
     else:
         if len(data_list) == 1:
@@ -1147,6 +1193,7 @@ def main():
                 metric=args.metric,
                 title=args.title,
                 out_path=out_path,
+                fig_scale=args.figscale,
             )
         elif len(data_list) == 2:
             make_plot_top1_and_error_compare(
@@ -1157,6 +1204,7 @@ def main():
                 metric=args.metric,
                 title=args.title if args.title else f"Comparison: {labels[0]} vs {labels[1]}",
                 out_path=out_path,
+                fig_scale=args.figscale,
             )
         else:
             make_plot_top1_and_error_multi(
@@ -1165,6 +1213,7 @@ def main():
                 metric=args.metric,
                 title=args.title if args.title else ("Comparison: " + " vs ".join(labels)),
                 out_path=out_path,
+                fig_scale=args.figscale,
             )
 
 

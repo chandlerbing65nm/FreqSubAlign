@@ -17,7 +17,7 @@ conda init
 conda activate ttadapt
 
 # Set the working directory
-cd /users/doloriel/work/Repo/SWaveletA
+cd /users/doloriel/work/Repo/FreqSubAlign
 
 # Run the Python script
 python -m main_tta_ucf

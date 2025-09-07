@@ -151,7 +151,7 @@ if __name__ == '__main__':
 
     # args.tsn_style = True
     # ========================= New Arguments ==========================
-    args.corruption_list = 'continual_alternate' # mini, full, continual, random, continual_alternate
+    args.corruption_list = 'continual' # mini, full, continual, random, continual_alternate
 
     # DWT/FFT/DCT subband alignment hook
     args.dwt_align_enable = True
@@ -229,9 +229,9 @@ if __name__ == '__main__':
     # Choose alignment weights
     args.lambda_base_align = 1.0
     args.dwt_align_lambda_ll = 1.0
-    args.dwt_align_lambda_lh = 1.0
-    args.dwt_align_lambda_hl = 1.0
-    args.dwt_align_lambda_hh = 1.0
+    args.dwt_align_lambda_lh = 0.0
+    args.dwt_align_lambda_hl = 0.0
+    args.dwt_align_lambda_hh = 0.0
 
     if args.dwt_align_levels == 2 and args.dwt_align_3d == False and args.arch == 'tanet':
         args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt/dwt_subband_stats_L2_20250828_163634.npz'
