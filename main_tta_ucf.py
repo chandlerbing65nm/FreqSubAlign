@@ -156,11 +156,12 @@ if __name__ == '__main__':
     # DWT/FFT/DCT subband alignment hook
     args.dwt_align_enable = True
     # args.dwt_align_adaptive_lambda = True
-    args.dwt_align_3d = True
+    # args.dwt_align_3d = True
     args.dwt_align_levels = 1  # must match the NPZ, up to 2 only
     args.subband_transform = 'dwt' # 'dwt' (default), 'fft', or 'dct'
     args.dwt_wavelet = 'haar' # haar , db2
     # args.cross_dwt_stats = True
+    args.stat_reg = 'BNS'
 
     # Select transform-specific stats NPZ
     transform = getattr(args, 'subband_transform', 'dwt')
@@ -229,9 +230,9 @@ if __name__ == '__main__':
     # Choose alignment weights
     args.lambda_base_align = 1.0
     args.dwt_align_lambda_ll = 1.0
-    args.dwt_align_lambda_lh = 0.0
-    args.dwt_align_lambda_hl = 0.0
-    args.dwt_align_lambda_hh = 0.0
+    args.dwt_align_lambda_lh = 1.0
+    args.dwt_align_lambda_hl = 1.0
+    args.dwt_align_lambda_hh = 1.0
 
     if args.dwt_align_levels == 2 and args.dwt_align_3d == False and args.arch == 'tanet':
         args.dwt_stats_npz_file = '/scratch/project_465001897/datasets/ucf/source_statistics_tanet_dwt/dwt_subband_stats_L2_20250828_163634.npz'
@@ -261,7 +262,7 @@ if __name__ == '__main__':
         # Source-only evaluation parameters
         # args.test_crops = 1
         args.evaluate_baselines = True
-        args.baseline = 'norm' # source, shot, tent, dua, t3a, norm
+        args.baseline = 'dua' # source, shot, tent, dua, t3a, norm
         args.t3a_filter_k = 100
         suffix = f'baseline={args.baseline}'
 
@@ -300,6 +301,9 @@ if __name__ == '__main__':
     # Mark cross-dataset stats ablation if used
     if getattr(args, 'cross_dwt_stats', False):
         suffix += "_crossDWT"
+    # Include statistic regularization mode (e.g., mean_var, BNS)
+    if hasattr(args, 'stat_reg'):
+        suffix += f"_statReg={args.stat_reg}"
     args.result_suffix = suffix
 
     # Set up corruption types to evaluate

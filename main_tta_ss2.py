@@ -107,7 +107,7 @@ if __name__ == '__main__':
     set_seed(142)
     
     # Choose model architecture and dataset
-    args.arch = 'videoswintransformer'  # videoswintransformer, tanet
+    args.arch = 'tanet'  # videoswintransformer, tanet
     args.dataset = 'somethingv2'
 
     # Map dataset names to directory names
@@ -154,7 +154,7 @@ if __name__ == '__main__':
     # DWT subband alignment hook
     args.dwt_align_enable = True
     # args.dwt_align_adaptive_lambda = True
-    # args.dwt_align_3d = True
+    args.dwt_align_3d = True
     args.dwt_align_levels = 1  # must match the NPZ
     args.subband_transform = 'dwt'
     # args.cross_dwt_stats = True
@@ -191,9 +191,9 @@ if __name__ == '__main__':
     # Choose alignment weights
     args.lambda_base_align = 1.0
     args.dwt_align_lambda_ll = 1.0
-    args.dwt_align_lambda_lh = 1.0
-    args.dwt_align_lambda_hl = 1.0
-    args.dwt_align_lambda_hh = 1.0
+    args.dwt_align_lambda_lh = 0.0
+    args.dwt_align_lambda_hl = 0.0
+    args.dwt_align_lambda_hh = 0.0
 
     # ============================================================================================
 

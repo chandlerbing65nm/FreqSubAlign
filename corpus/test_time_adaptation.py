@@ -30,7 +30,7 @@ from models.videoswintransformer_models.recognizer3d import Recognizer3D
 
 from utils.transforms import *
 from utils.utils_ import AverageMeter, accuracy,  get_augmentation
-from utils.BNS_utils import BNFeatureHook, choose_layers
+from utils.BNS_utils import BNFeatureHook, choose_layers, BNSubbandDWTRegHook
 import baselines.tent as tent
 import os.path as osp
 from utils.pred_consistency_utils import compute_pred_consis
@@ -123,6 +123,8 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
     gt_concat = []
     end = time.time()
     eval_loader_iterator = iter(eval_loader)
+    # Track how many hooks were added per layer so we can re-attach them in tta_online mode
+    layer_hook_count_map = {}
 
     # todo ############################################################
     # todo ##################################### choose layers
@@ -367,8 +369,48 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                         for block_name in args.chosen_blocks:
                             if block_name in chosen_layer_name:
                                 # regularization between manually computed target batch statistics (whether or not in running manner) between source statistics
-                                stat_reg_hooks.append(BNFeatureHook(chosen_layer, reg_type= args.reg_type, running_manner=args.running_manner,
-                                                  use_src_stat_in_reg=args.use_src_stat_in_reg, momentum=args.momentum_bns))
+                                stat_reg_hooks.append(
+                                    BNFeatureHook(
+                                        chosen_layer,
+                                        reg_type=args.reg_type,
+                                        running_manner=args.running_manner,
+                                        use_src_stat_in_reg=args.use_src_stat_in_reg,
+                                        momentum=args.momentum_bns,
+                                    )
+                                )
+                                hooks_for_this_layer = 1
+                                # Optional: add DWT subband alignment using BN stored stats (no precomputed dataset stats)
+                                if getattr(args, 'dwt_align_enable', False):
+                                    base_lambdas = {
+                                        'LL': getattr(args, 'dwt_align_lambda_ll', 0.0),
+                                        'LH': getattr(args, 'dwt_align_lambda_lh', 0.0),
+                                        'HL': getattr(args, 'dwt_align_lambda_hl', 0.0),
+                                        'HH': getattr(args, 'dwt_align_lambda_hh', 0.0),
+                                    }
+                                    band_lambdas = {b: lam for b, lam in base_lambdas.items() if lam > 0}
+                                    if len(band_lambdas) > 0:
+                                        stat_reg_hooks.append(
+                                            BNSubbandDWTRegHook(
+                                                module=chosen_layer,
+                                                clip_len=args.clip_length,
+                                                dwt_levels=getattr(args, 'dwt_align_levels', 1),
+                                                band_lambdas=band_lambdas,
+                                                reg_type=args.reg_type,
+                                                moving_avg=getattr(args, 'moving_avg', False),
+                                                momentum=getattr(args, 'momentum_bns', 0.1),
+                                                running_manner=getattr(args, 'running_manner', False),
+                                                before_norm=getattr(args, 'before_norm', False),
+                                                if_sample_tta_aug_views=getattr(args, 'if_sample_tta_aug_views', False),
+                                                n_augmented_views=getattr(args, 'n_augmented_views', 1),
+                                                dwt_3d=getattr(args, 'dwt_align_3d', False),
+                                                wavelet=getattr(args, 'dwt_wavelet', 'haar'),
+                                                use_src_stat_in_reg=getattr(args, 'use_src_stat_in_reg', True),
+                                            )
+                                        )
+                                        hooks_for_this_layer += 1
+                                    
+                                layer_hook_count_map[layer_id] = hooks_for_this_layer
+                                
                 else:
                     raise Exception(f'undefined regularization type {args.stat_reg}')
 

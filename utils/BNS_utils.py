@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from utils.utils_ import AverageMeter, AverageMeterTensor
-from utils.norm_stats_utils import compute_regularization
+from utils.utils_ import AverageMeter, AverageMeterTensor, MovingAverageTensor
+from utils.norm_stats_utils import compute_regularization, CombineNormStatsRegHook_DWT
 
 l1_loss = nn.L1Loss(reduction='mean')
 
@@ -80,6 +80,182 @@ class BNFeatureHook():
 
 
 
+
+
+class BNSubbandDWTRegHook:
+    """
+    DWT subband regularization using BN stored stats as targets.
+
+    - Works on BatchNorm2d/BatchNorm3d (skips BatchNorm1d)
+    - Computes per-channel mean/var over DWT subbands (LL/LH/HL/HH)
+    - Targets are BN running stats (frozen at init if use_src_stat_in_reg=True,
+      otherwise read from module.running_* at each forward)
+    - Supports 2D multi-level and 3D level-wise DWT with selectable wavelet
+    - Exposes r_feature and r_feature_bands for integration with existing loss code
+    - Supports "running_manner" so statistics can be accumulated with EMA like BNFeatureHook
+    """
+    def __init__(
+        self,
+        module: nn.Module,
+        clip_len: int,
+        dwt_levels: int = 1,
+        band_lambdas: dict = None,
+        reg_type: str = 'mse_loss',
+        moving_avg: bool = False,
+        momentum: float = 0.1,
+        before_norm: bool = False,
+        if_sample_tta_aug_views: bool = False,
+        n_augmented_views: int = 1,
+        dwt_3d: bool = False,
+        wavelet: str = 'haar',
+        use_src_stat_in_reg: bool = True,
+        running_manner: bool = False,
+    ):
+        self.hook = module.register_forward_hook(self.hook_fn)
+        self.clip_len = int(clip_len)
+        self.dwt_levels = max(1, int(dwt_levels))
+        self.reg_type = reg_type
+        # running_manner behaves like an alias for moving average accumulation
+        self.running_manner = bool(running_manner)
+        self.moving_avg = bool(moving_avg) or self.running_manner
+        self.momentum = float(momentum)
+        self.before_norm = before_norm
+        self.if_sample_tta_aug_views = if_sample_tta_aug_views
+        self.n_augmented_views = int(n_augmented_views)
+        self.dwt_3d = bool(dwt_3d)
+        self.wavelet = str(wavelet).lower()
+        self.use_src_stat_in_reg = bool(use_src_stat_in_reg)
+
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        # BN targets: capture source stats at construction if requested
+        if self.use_src_stat_in_reg and hasattr(module, 'running_mean') and hasattr(module, 'running_var'):
+            self.source_mean = module.running_mean.data.clone().to(self.device)
+            self.source_var = module.running_var.data.clone().to(self.device)
+        else:
+            self.source_mean = None
+            self.source_var = None
+
+        # Band config
+        self.bands = ['LL', 'LH', 'HL', 'HH']
+        band_lambdas = band_lambdas or {}
+        self.band_lambdas = {k: float(band_lambdas.get(k, 0.0)) for k in self.bands}
+
+        # Running-EMA buffers for predicted stats per band (C-dim)
+        self.mean_pred = {b: None for b in self.bands}
+        self.var_pred = {b: None for b in self.bands}
+        if self.running_manner:
+            # Initialize zeros like BN stats (per-channel)
+            template = self.source_mean if self.source_mean is not None else torch.tensor(0.0, device=self.device)
+            for b in self.bands:
+                if isinstance(template, torch.Tensor) and template.ndim >= 1:
+                    self.mean_pred[b] = torch.zeros_like(template)
+                    self.var_pred[b] = torch.zeros_like(template)
+                else:
+                    self.mean_pred[b] = None
+                    self.var_pred[b] = None
+
+        # Exposed losses
+        self.r_feature = torch.tensor(0.0, device=self.device)
+        self.r_feature_bands = {b: torch.tensor(0.0, device=self.device) for b in self.bands}
+
+    def _to_ncthw(self, module: nn.Module, feature: torch.Tensor) -> torch.Tensor:
+        # Convert normalized feature to (N,C,T,H,W) according to module type
+        if isinstance(module, nn.BatchNorm1d):
+            return None  # not supported
+        elif isinstance(module, nn.BatchNorm2d):
+            nt, c, h, w = feature.size()
+            t = self.clip_len
+            if self.if_sample_tta_aug_views:
+                m = self.n_augmented_views
+                bz = nt // (m * t)
+                feat = feature.view(bz * m, t, c, h, w).permute(0, 2, 1, 3, 4).contiguous()
+            else:
+                bz = nt // t
+                feat = feature.view(bz, t, c, h, w).permute(0, 2, 1, 3, 4).contiguous()
+            return feat
+        elif isinstance(module, nn.BatchNorm3d):
+            # Already N,C,T,H,W
+            return feature
+        else:
+            return None
+
+    def _apply_dwt(self, x: torch.Tensor):
+        # Return dict band -> list of subband tensors to aggregate
+        if self.dwt_3d:
+            LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH = CombineNormStatsRegHook_DWT._dwt3d_multi_level(
+                x, self.dwt_levels, wavelet=self.wavelet
+            )
+            grouped = {
+                'LL': [LLL, HLL],
+                'LH': [LLH, HLH],
+                'HL': [LHL, HHL],
+                'HH': [LHH, HHH],
+            }
+        else:
+            LL, LH, HL, HH = CombineNormStatsRegHook_DWT._dwt2d_multi_level(x, self.dwt_levels, wavelet=self.wavelet)
+            grouped = {'LL': [LL], 'LH': [LH], 'HL': [HL], 'HH': [HH]}
+        return grouped
+
+    def hook_fn(self, module, input, output):
+        feature = input[0] if self.before_norm else output
+        # Reset losses
+        self.r_feature = torch.tensor(0.0, device=self.device)
+        self.r_feature_bands = {b: torch.tensor(0.0, device=self.device) for b in self.bands}
+
+        # Prepare target BN stats
+        if self.use_src_stat_in_reg and (self.source_mean is not None) and (self.source_var is not None):
+            tgt_mean = self.source_mean
+            tgt_var = self.source_var
+        else:
+            if not (hasattr(module, 'running_mean') and hasattr(module, 'running_var')):
+                return
+            tgt_mean = module.running_mean.data.to(self.device)
+            tgt_var = module.running_var.data.to(self.device)
+
+        # Convert to N,C,T,H,W
+        feat = self._to_ncthw(module, feature)
+        if feat is None:
+            return
+
+        # Apply DWT
+        grouped = self._apply_dwt(feat)
+
+        # Per-band computation similar to BNFeatureHook but on transformed subbands
+        for b in self.bands:
+            if self.band_lambdas.get(b, 0.0) <= 0:
+                continue
+            sb_list = [t for t in grouped[b] if t is not None]
+            if len(sb_list) == 0:
+                continue
+            sb = torch.cat(sb_list, dim=0)  # (N*, C, T', H', W')
+            c = sb.shape[1]
+            batch_mean = sb.mean(dim=(0, 2, 3, 4))
+            batch_var = sb.permute(1, 0, 2, 3, 4).contiguous().view(c, -1).var(1, unbiased=False)
+
+            if self.running_manner:
+                if self.mean_pred[b] is None or self.var_pred[b] is None:
+                    # Initialize lazily if we couldn't at __init__ time
+                    self.mean_pred[b] = torch.zeros_like(tgt_mean)
+                    self.var_pred[b] = torch.zeros_like(tgt_var)
+                mean_use = self.momentum * batch_mean + (1.0 - self.momentum) * self.mean_pred[b].detach()
+                var_use = self.momentum * batch_var + (1.0 - self.momentum) * self.var_pred[b].detach()
+                self.mean_pred[b] = mean_use
+                self.var_pred[b] = var_use
+            else:
+                mean_use = batch_mean
+                var_use = batch_var
+
+            reg_b = compute_regularization(tgt_mean, mean_use, tgt_var, var_use, self.reg_type)
+            lam = self.band_lambdas[b]
+            self.r_feature = self.r_feature + lam * reg_b
+            self.r_feature_bands[b] = lam * reg_b
+
+    def add_hook_back(self, module):
+        self.hook = module.register_forward_hook(self.hook_fn)
+
+    def close(self):
+        self.hook.remove()
 
 
 class TempStatsRegHook():
