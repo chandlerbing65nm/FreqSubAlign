@@ -106,7 +106,7 @@ if __name__ == '__main__':
     set_seed(142)
     
     # Choose model architecture and dataset
-    args.arch = 'tanet'  # videoswintransformer, tanet
+    args.arch = 'videoswintransformer'  # videoswintransformer, tanet
     args.dataset = 'ucf101'
 
     # Map dataset names to directory names
@@ -151,17 +151,16 @@ if __name__ == '__main__':
 
     # args.tsn_style = True
     # ========================= New Arguments ==========================
-    args.corruption_list = 'continual' # mini, full, continual, random, continual_alternate
+    args.corruption_list = 'continual_tempcorr' # mini, full, continual_tempcorr, random, continual_alternate
 
     # DWT/FFT/DCT subband alignment hook
     args.dwt_align_enable = True
     # args.dwt_align_adaptive_lambda = True
-    # args.dwt_align_3d = True
+    args.dwt_align_3d = True
     args.dwt_align_levels = 1  # must match the NPZ, up to 2 only
-    args.subband_transform = 'dwt' # 'dwt' (default), 'fft', or 'dct'
+    args.subband_transform = 'dct' # 'dwt' (default), 'fft', or 'dct'
     args.dwt_wavelet = 'haar' # haar , db2
     # args.cross_dwt_stats = True
-    args.stat_reg = 'BNS'
 
     # Select transform-specific stats NPZ
     transform = getattr(args, 'subband_transform', 'dwt')
@@ -262,7 +261,7 @@ if __name__ == '__main__':
         # Source-only evaluation parameters
         # args.test_crops = 1
         args.evaluate_baselines = True
-        args.baseline = 'dua' # source, shot, tent, dua, t3a, norm
+        args.baseline = 't3a' # source, shot, tent, dua, t3a, norm
         args.t3a_filter_k = 100
         suffix = f'baseline={args.baseline}'
 
@@ -324,6 +323,10 @@ if __name__ == '__main__':
         corruptions = [
             # 'alternate_gauss',
             'continual_alternate',
+        ]
+    elif getattr(args, 'corruption_list', 'full') == 'continual_tempcorr':
+        corruptions = [
+            'continual_tempcorr',
         ]
     elif getattr(args, 'corruption_list', 'full') == 'continual':
         corruptions = [

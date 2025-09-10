@@ -189,11 +189,11 @@ if __name__ == '__main__':
         print(f"[WARN] DWT stats NPZ not found: {args.dwt_stats_npz_file}")
 
     # Choose alignment weights
-    args.lambda_base_align = 1.0
-    args.dwt_align_lambda_ll = 1.0
+    args.lambda_base_align = 0.0
+    args.dwt_align_lambda_ll = 0.0
     args.dwt_align_lambda_lh = 0.0
     args.dwt_align_lambda_hl = 0.0
-    args.dwt_align_lambda_hh = 0.0
+    args.dwt_align_lambda_hh = 1.0
 
     # ============================================================================================
 
@@ -238,6 +238,8 @@ if __name__ == '__main__':
         suffix += "_bnaffine"
     suffix += f"_corruption={args.corruption_list}"
     suffix += f"_bs{args.batch_size}"
+    # Include base alignment lambda for reproducibility
+    suffix += f"_lambdaBase{getattr(args, 'lambda_base_align', 1.0)}"
     # Mark cross-dataset stats ablation if used
     if getattr(args, 'cross_dwt_stats', False):
         suffix += "_crossDWT"

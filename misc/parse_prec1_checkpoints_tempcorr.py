@@ -102,22 +102,21 @@ CORR_NAMES: List[str] = [
     "h265_abr",
 ]
 
-
 # Checkpoints (originally noted as 0-based counts in logs; parser now uses 1-based internally)
 # Top block (smaller totals) corresponds to UCF-101.
 CHECKPOINTS_UCF: Dict[str, int] = {
-    'gauss': 316,
-    'pepper': 632,
-    'salt': 948,
-    'shot': 1263,
-    'zoom': 1578,
-    'impulse': 1893,
-    'defocus': 2208,
-    'motion': 2523,
-    'jpeg': 2838,
-    'contrast': 3153,
-    'rain': 3468,
-    'h265_abr': 3783,
+    'gauss': 304,
+    'pepper': 611,
+    'salt': 918,
+    'shot': 1225,
+    'zoom': 1521,
+    'impulse': 1832,
+    'defocus': 2159,
+    'motion': 2487,
+    'jpeg': 2790,
+    'contrast': 3089,
+    'rain': 3426,
+    'h265_abr': 3754,
 }
 
 # Bottom block (larger totals) corresponds to Something-Something V2 (SSv2).
