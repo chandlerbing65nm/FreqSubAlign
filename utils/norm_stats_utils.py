@@ -151,6 +151,7 @@ class CombineNormStatsRegHook_DWT():
         dwt_3d: bool = False,
         subband_transform: str = 'dwt',
         wavelet: str = 'haar',
+        combine_bands: bool = False,
     ):
         self.hook = module.register_forward_hook(self.hook_fn)
         self.clip_len = clip_len
@@ -164,6 +165,7 @@ class CombineNormStatsRegHook_DWT():
         self.dwt_3d = bool(dwt_3d)
         self.subband_transform = str(subband_transform).lower()
         self.wavelet = str(wavelet).lower()
+        self.combine_bands = bool(combine_bands)
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -190,7 +192,33 @@ class CombineNormStatsRegHook_DWT():
         # Set up meters
         Meter = MovingAverageTensor if self.moving_avg else AverageMeterTensor
         self.mean_m = {b: Meter(momentum=self.momentum) if self.moving_avg else Meter() for b in self.bands}
-        self.var_m = {b: Meter(momentum=self.momentum) if self.moving_avg else Meter() for b in self.bands}
+        self.var_m = {b: Meter(momentum=self.momentum) if self.moving_avg else AverageMeterTensor() for b in self.bands}
+        # Combined meters if needed
+        if self.combine_bands:
+            self.mean_m_combined = Meter(momentum=self.momentum) if self.moving_avg else Meter()
+            self.var_m_combined = Meter(momentum=self.momentum) if self.moving_avg else AverageMeterTensor()
+            # Precompute combined clean stats via equal-weight mixture
+            mus = [self.source_mean[b] for b in self.bands if self.source_mean[b] is not None]
+            vars_ = [self.source_var[b] for b in self.bands if self.source_var[b] is not None]
+            if len(mus) > 0 and len(vars_) == len(mus):
+                self.source_mean_combined, self.source_var_combined = CombineNormStatsRegHook_DWT._combine_means_vars(mus, vars_)
+            else:
+                self.source_mean_combined, self.source_var_combined = None, None
+
+    @staticmethod
+    def _combine_means_vars(mu_list, var_list):
+        """
+        Combine per-channel means/vars from multiple groups using equal weights.
+        var = E[X^2] - (E[X])^2 where E[X^2] = mean(var_i + mu_i^2).
+        """
+        # Assume all tensors on same device/dtype and same shape (C,)
+        k = float(len(mu_list))
+        mu_stack = torch.stack(mu_list, dim=0)  # (k, C)
+        var_stack = torch.stack(var_list, dim=0)  # (k, C)
+        mu_bar = mu_stack.mean(dim=0)  # (C,)
+        second_moment = (var_stack + mu_stack.pow(2)).mean(dim=0)
+        var_bar = second_moment - mu_bar.pow(2)
+        return mu_bar, var_bar
 
     @staticmethod
     def _haar_kernels(device):
@@ -595,30 +623,56 @@ class CombineNormStatsRegHook_DWT():
         else:
             raise ValueError(f"Unknown subband_transform: {self.subband_transform}")
 
-        for b in self.bands:
-            if self.source_mean[b] is None or self.source_var[b] is None:
-                continue
-            # Concatenate along batch dimension to aggregate stats across grouped subbands
-            sb_list = [t for t in grouped[b] if t is not None]
-            if len(sb_list) == 0:
-                continue
-            sb = torch.cat(sb_list, dim=0)
+        if self.combine_bands:
+            # Combine all available subbands into one statistic
+            sb_all = []
+            for b in self.bands:
+                sb_all.extend([t for t in grouped[b] if t is not None])
+            if len(sb_all) == 0 or self.source_mean_combined is None or self.source_var_combined is None:
+                return
+            sb = torch.cat(sb_all, dim=0)
             c = sb.shape[1]
             mean_c = sb.mean(dim=(0, 2, 3, 4))
             var_c = sb.permute(1, 0, 2, 3, 4).contiguous().view(c, -1).var(1, unbiased=False)
             if self.moving_avg:
-                self.mean_m[b].update(mean_c)
-                self.var_m[b].update(var_c)
+                self.mean_m_combined.update(mean_c)
+                self.var_m_combined.update(var_c)
+                mean_use, var_use = self.mean_m_combined.avg, self.var_m_combined.avg
             else:
-                self.mean_m[b].update(mean_c, n=sb.shape[0])
-                self.var_m[b].update(var_c, n=sb.shape[0])
-            lam = self.band_lambdas.get(b, 0.0)
-            if lam > 0:
-                reg_b = compute_regularization(
-                    self.source_mean[b], self.mean_m[b].avg, self.source_var[b], self.var_m[b].avg, self.reg_type
-                )
-                self.r_feature = self.r_feature + lam * reg_b
-                self.r_feature_bands[b] = lam * reg_b
+                self.mean_m_combined.update(mean_c, n=sb.shape[0])
+                self.var_m_combined.update(var_c, n=sb.shape[0])
+                mean_use, var_use = self.mean_m_combined.avg, self.var_m_combined.avg
+            reg = compute_regularization(self.source_mean_combined, mean_use, self.source_var_combined, var_use, self.reg_type)
+            lam_total = sum([self.band_lambdas.get(b, 0.0) for b in self.bands])
+            if lam_total == 0.0:
+                lam_total = 1.0
+            self.r_feature = self.r_feature + lam_total * reg
+            # leave r_feature_bands empty in combined mode
+        else:
+            for b in self.bands:
+                if self.source_mean[b] is None or self.source_var[b] is None:
+                    continue
+                # Concatenate along batch dimension to aggregate stats across grouped subbands
+                sb_list = [t for t in grouped[b] if t is not None]
+                if len(sb_list) == 0:
+                    continue
+                sb = torch.cat(sb_list, dim=0)
+                c = sb.shape[1]
+                mean_c = sb.mean(dim=(0, 2, 3, 4))
+                var_c = sb.permute(1, 0, 2, 3, 4).contiguous().view(c, -1).var(1, unbiased=False)
+                if self.moving_avg:
+                    self.mean_m[b].update(mean_c)
+                    self.var_m[b].update(var_c)
+                else:
+                    self.mean_m[b].update(mean_c, n=sb.shape[0])
+                    self.var_m[b].update(var_c, n=sb.shape[0])
+                lam = self.band_lambdas.get(b, 0.0)
+                if lam > 0:
+                    reg_b = compute_regularization(
+                        self.source_mean[b], self.mean_m[b].avg, self.source_var[b], self.var_m[b].avg, self.reg_type
+                    )
+                    self.r_feature = self.r_feature + lam * reg_b
+                    self.r_feature_bands[b] = lam * reg_b
 
     def add_hook_back(self, module):
         self.hook = module.register_forward_hook(self.hook_fn)

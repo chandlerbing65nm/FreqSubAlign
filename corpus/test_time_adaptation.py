@@ -353,6 +353,7 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                                                         dwt_3d=getattr(args, 'dwt_align_3d', False),
                                                         subband_transform=getattr(args, 'subband_transform', 'dwt'),
                                                         wavelet=getattr(args, 'dwt_wavelet', 'haar'),
+                                                        combine_bands=getattr(args, 'dwt_align_combine_bands', False),
                                                     )
                                                 )
                                                 hooks_for_this_layer += 1
@@ -405,6 +406,7 @@ def tta_standard(model_origin, criterion, args=None, logger = None, writer =None
                                                 dwt_3d=getattr(args, 'dwt_align_3d', False),
                                                 wavelet=getattr(args, 'dwt_wavelet', 'haar'),
                                                 use_src_stat_in_reg=getattr(args, 'use_src_stat_in_reg', True),
+                                                combine_bands=getattr(args, 'dwt_align_combine_bands', False),
                                             )
                                         )
                                         hooks_for_this_layer += 1

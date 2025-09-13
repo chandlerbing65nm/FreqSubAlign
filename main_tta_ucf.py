@@ -118,7 +118,7 @@ if __name__ == '__main__':
     dataset_dir = dataset_to_dir.get(args.dataset, args.dataset)
 
     # Choose evaluation mode (TTA or source-only)
-    args.tta = True  # Set to False for source-only evaluation
+    args.tta = False  # Set to False for source-only evaluation
     
     # Get model configuration based on architecture and dataset
     model_config = get_model_config(args.arch, args.dataset, tta_mode=args.tta)
@@ -145,22 +145,24 @@ if __name__ == '__main__':
 
     args.n_augmented_views = 2
     args.if_sample_tta_aug_views = True
-    # args.lambda_pred_consis = 0.0
     args.batch_size = 1
     args.n_epoch_adapat = 1
 
     # args.tsn_style = True
     # ========================= New Arguments ==========================
-    args.corruption_list = 'continual_tempcorr' # mini, full, continual_tempcorr, random, continual_alternate
+    args.corruption_list = 'random' # mini, continual, continual_tempcorr, random, continual_alternate
 
-    # DWT/FFT/DCT subband alignment hook
-    args.dwt_align_enable = True
-    # args.dwt_align_adaptive_lambda = True
-    args.dwt_align_3d = True
-    args.dwt_align_levels = 1  # must match the NPZ, up to 2 only
-    args.subband_transform = 'dct' # 'dwt' (default), 'fft', or 'dct'
-    args.dwt_wavelet = 'haar' # haar , db2
-    # args.cross_dwt_stats = True
+    # # DWT/FFT/DCT subband alignment hook
+    # args.dwt_align_enable = True
+    # # args.dwt_align_adaptive_lambda = True
+    # args.dwt_align_3d = True
+    # args.dwt_align_levels = 1  # must match the NPZ, up to 2 only
+    # args.subband_transform = 'dwt' # 'dwt' (default), 'fft', or 'dct'
+    # args.dwt_wavelet = 'haar' # haar , db2
+    # # args.cross_dwt_stats = True
+    # # args.dwt_align_combine_bands = True
+    # # args.reg_type = 'mse_loss' # l1_loss, mse_loss
+    # # args.lambda_pred_consis = 0.0
 
     # Select transform-specific stats NPZ
     transform = getattr(args, 'subband_transform', 'dwt')
@@ -261,7 +263,7 @@ if __name__ == '__main__':
         # Source-only evaluation parameters
         # args.test_crops = 1
         args.evaluate_baselines = True
-        args.baseline = 't3a' # source, shot, tent, dua, t3a, norm
+        args.baseline = 'rem' # source, shot, tent, dua, t3a, norm, rem
         args.t3a_filter_k = 100
         suffix = f'baseline={args.baseline}'
 
@@ -277,6 +279,9 @@ if __name__ == '__main__':
             # Wavelet family used for DWT (haar/db4)
             wavelet = getattr(args, 'dwt_wavelet', 'haar')
             suffix += f"-{wavelet}"
+        # Mark combined-band mode
+        if getattr(args, 'dwt_align_combine_bands', False):
+            suffix += "_combine"
         if getattr(args, 'dwt_align_adaptive_lambda', False):
             suffix += "_adaptive"
         # Compact lambda encoding: include only lambdas > 0 to keep suffix short
@@ -302,7 +307,10 @@ if __name__ == '__main__':
         suffix += "_crossDWT"
     # Include statistic regularization mode (e.g., mean_var, BNS)
     if hasattr(args, 'stat_reg'):
-        suffix += f"_statReg={args.stat_reg}"
+        suffix += f"_statReg={args.stat_reg}"  
+    if hasattr(args, 'reg_type'):
+        suffix += f"_RegType={args.reg_type}"  
+    suffix += f"_lambdaConsis{args.lambda_pred_consis}"
     args.result_suffix = suffix
 
     # Set up corruption types to evaluate

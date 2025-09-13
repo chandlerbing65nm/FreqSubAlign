@@ -107,7 +107,7 @@ if __name__ == '__main__':
     set_seed(142)
     
     # Choose model architecture and dataset
-    args.arch = 'tanet'  # videoswintransformer, tanet
+    args.arch = 'videoswintransformer'  # videoswintransformer, tanet
     args.dataset = 'somethingv2'
 
     # Map dataset names to directory names
@@ -119,7 +119,7 @@ if __name__ == '__main__':
     dataset_dir = dataset_to_dir.get(args.dataset, args.dataset)
 
     # Choose evaluation mode (TTA or source-only)
-    args.tta = True  # Set to False for source-only evaluation
+    args.tta = False  # Set to False for source-only evaluation
     
     # Get model configuration based on architecture and dataset
     model_config = get_model_config(args.arch, args.dataset, tta_mode=args.tta)
@@ -149,15 +149,18 @@ if __name__ == '__main__':
     args.batch_size = 1  # Default to 1 for TTA, can be overridden
 
     # ========================= New Arguments ==========================
-    args.corruption_list = 'continual' # mini, full, continual, random, continual_alternate
+    args.corruption_list = 'random' # mini, continual, continual, random, continual_alternate
 
-    # DWT subband alignment hook
-    args.dwt_align_enable = True
-    # args.dwt_align_adaptive_lambda = True
-    args.dwt_align_3d = True
-    args.dwt_align_levels = 1  # must match the NPZ
-    args.subband_transform = 'dwt'
-    # args.cross_dwt_stats = True
+    # # DWT subband alignment hook
+    # args.dwt_align_enable = True
+    # # args.dwt_align_adaptive_lambda = True
+    # args.dwt_align_3d = True
+    # args.dwt_align_levels = 1  # must match the NPZ
+    # args.subband_transform = 'dwt'
+    # # args.cross_dwt_stats = True
+    # # args.dwt_align_combine_bands = True
+    # # args.reg_type = 'mse_loss' # l1_loss, mse_loss
+    # args.lambda_pred_consis = 0.0
 
     if args.arch == 'videoswintransformer' and args.dataset == 'somethingv2' and args.dwt_align_3d and args.subband_transform in ['dwt']:
         # Default (same-dataset) stats
@@ -189,10 +192,10 @@ if __name__ == '__main__':
         print(f"[WARN] DWT stats NPZ not found: {args.dwt_stats_npz_file}")
 
     # Choose alignment weights
-    args.lambda_base_align = 0.0
-    args.dwt_align_lambda_ll = 0.0
-    args.dwt_align_lambda_lh = 0.0
-    args.dwt_align_lambda_hl = 0.0
+    args.lambda_base_align = 1.0
+    args.dwt_align_lambda_ll = 1.0
+    args.dwt_align_lambda_lh = 1.0
+    args.dwt_align_lambda_hl = 1.0
     args.dwt_align_lambda_hh = 1.0
 
     # ============================================================================================
@@ -210,7 +213,7 @@ if __name__ == '__main__':
         # Source-only evaluation parameters
         # args.test_crops = 1
         args.evaluate_baselines = True
-        args.baseline = 'shot' # source, shot, tent, dua, rem, norm, t3a
+        args.baseline = 'rem' # source, shot, tent, dua, rem, norm, t3a, rem
         args.t3a_filter_k = 100
         suffix = f'baseline={args.baseline}'
 
@@ -220,6 +223,8 @@ if __name__ == '__main__':
     # DWT subband alignment hook settings (for reproducibility)
     if getattr(args, 'dwt_align_enable', False):
         suffix += f"_dwtAlign{'3D' if getattr(args, 'dwt_align_3d', False) else '2D'}-L{getattr(args, 'dwt_align_levels', 1)}"
+        if getattr(args, 'dwt_align_combine_bands', False):
+            suffix += "_combine"
         if getattr(args, 'dwt_align_adaptive_lambda', False):
             suffix += "_adaptive"
         # Compact lambda encoding: include only lambdas > 0 to keep suffix short
@@ -243,6 +248,9 @@ if __name__ == '__main__':
     # Mark cross-dataset stats ablation if used
     if getattr(args, 'cross_dwt_stats', False):
         suffix += "_crossDWT"
+    if hasattr(args, 'reg_type'):
+        suffix += f"_RegType={args.reg_type}"  
+    suffix += f"_lambdaConsis{args.lambda_pred_consis}"
     args.result_suffix = suffix
 
     # Set up corruption types to evaluate

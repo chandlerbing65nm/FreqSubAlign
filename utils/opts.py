@@ -125,6 +125,9 @@ parser.add_argument('--dwt_align_lambda_hh', type=float, default=1.0,
                     help='Lambda weight for HH subband alignment')
 parser.add_argument('--dwt_stats_npz_file', type=str, default='',
                     help='Path to NPZ file containing clean DWT subband stats per chosen layer: keys like LL_mean, LL_var, LH_mean, LH_var, HL_mean, HL_var, HH_mean, HH_var')
+# If enabled, combine LL/LH/HL/HH into a single aggregated statistic and align once
+parser.add_argument('--dwt_align_combine_bands', action='store_true',
+                    help='Combine subbands (LL/LH/HL/HH) into a single aggregated mean/var and align once per layer instead of per subband')
 # Cross-dataset DWT stats ablation flag: when enabled, entry scripts may override dwt_stats_npz_file
 parser.add_argument('--cross_dwt_stats', action='store_true',
                     help='Use DWT stats computed on a different training dataset (cross-dataset ablation). Entry scripts define the mapping.')

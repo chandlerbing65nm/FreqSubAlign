@@ -142,25 +142,53 @@ def validate(val_loader, model, criterion, iter, epoch=None, args=None, logger=N
         elif args.baseline == 'rem':
             from baselines.rem import forward_and_adapt as rem_forward_and_adapt
             from baselines.tent import softmax_entropy  # kept for potential debugging
-            logger.debug(f'Starting ---- {args.corruptions} ---- adaptation for REM...')
+            logger.debug(f'Starting ---- {args.corruptions} ---- online adapt-then-evaluate for REM...')
+            end = time.time()
             for i, (input, target) in enumerate(val_loader):
                 actual_bz = input.shape[0]
                 input = input.to(device)
                 target = target.to(device)
                 if args.arch == 'tanet':
+                    # (B, C*spatial_crops*temporal_clips*clip_len, H, W) -> (B*views, clip_len, C, H, W)
                     input = input.view(-1, 3, input.size(2), input.size(3))
                     input = input.view(actual_bz * args.test_crops * n_clips,
                                        args.clip_length, 3, input.size(2), input.size(3))
-                    _ = rem_forward_and_adapt(input, model, optimizer, args, actual_bz, n_clips)
+                    logits0, _, _, _ = rem_forward_and_adapt(input, model, optimizer, args, actual_bz, n_clips)
                 elif args.arch == 'videoswintransformer':
-                    _ = rem_forward_and_adapt(input, model, optimizer, args, actual_bz, n_clips)
-                    pass
+                    # Keep 6D input for VideoSwin; function handles shapes internally
+                    logits0, _, _, _ = rem_forward_and_adapt(input, model, optimizer, args, actual_bz, n_clips)
                 else:
-                    # e.g., Video Swin Transformer: adapt on flattened views, report per-video accuracy
+                    # Generic fallback: flatten views then adapt
                     n_views = args.test_crops * n_clips
                     input = input.reshape((-1,) + input.shape[2:])
-                    _ = rem_forward_and_adapt(input, model, optimizer, args)
-            logger.debug(f'REM Adaptation Finished --- Now Evaluating')
+                    logits0, _, _, _ = rem_forward_and_adapt(input, model, optimizer, args)
+
+                # Compute metrics on the adapted logits (online evaluation)
+                loss = criterion(logits0, target)
+                prec1, prec5 = accuracy(logits0.data, target, topk=(1, 5))
+                losses.update(loss.item(), actual_bz)
+                top1.update(prec1.item(), actual_bz)
+                top5.update(prec5.item(), actual_bz)
+
+                batch_time.update(time.time() - end)
+                end = time.time()
+
+                if args.verbose:
+                    if i % args.print_freq == 0:
+                        logger.debug(('[REM online] Test: [{0}/{1}]\t'
+                                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                                      'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
+                                      'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+                            i, len(val_loader), batch_time=batch_time, loss=losses, top1=top1, top5=top5)))
+
+            logger.debug(('[REM online] Testing Results: Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} Loss {loss.avg:.5f}'
+                          .format(top1=top1, top5=top5, loss=losses)))
+            if writer is not None:
+                writer.add_scalars('loss', {'val_loss': losses.avg}, global_step=epoch)
+                writer.add_scalars('acc', {'val_acc': top1.avg}, global_step=epoch)
+            logger.debug(f'[REM online] Validation acc {top1.avg} ')
+            return top1.avg
         elif args.baseline == 'norm':
             logger.debug(f'Starting ---- {args.corruptions} ---- adaptation for NORM...')
             with torch.no_grad():

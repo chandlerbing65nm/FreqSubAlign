@@ -110,6 +110,7 @@ class BNSubbandDWTRegHook:
         wavelet: str = 'haar',
         use_src_stat_in_reg: bool = True,
         running_manner: bool = False,
+        combine_bands: bool = False,
     ):
         self.hook = module.register_forward_hook(self.hook_fn)
         self.clip_len = int(clip_len)
@@ -125,6 +126,7 @@ class BNSubbandDWTRegHook:
         self.dwt_3d = bool(dwt_3d)
         self.wavelet = str(wavelet).lower()
         self.use_src_stat_in_reg = bool(use_src_stat_in_reg)
+        self.combine_bands = bool(combine_bands)
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -221,35 +223,68 @@ class BNSubbandDWTRegHook:
         # Apply DWT
         grouped = self._apply_dwt(feat)
 
-        # Per-band computation similar to BNFeatureHook but on transformed subbands
-        for b in self.bands:
-            if self.band_lambdas.get(b, 0.0) <= 0:
-                continue
-            sb_list = [t for t in grouped[b] if t is not None]
-            if len(sb_list) == 0:
-                continue
-            sb = torch.cat(sb_list, dim=0)  # (N*, C, T', H', W')
+        if self.combine_bands:
+            # Combine across all bands and align once to BN stats
+            sb_all = []
+            for b in self.bands:
+                sb_all.extend([t for t in grouped[b] if t is not None])
+            if len(sb_all) == 0:
+                return
+            sb = torch.cat(sb_all, dim=0)
             c = sb.shape[1]
             batch_mean = sb.mean(dim=(0, 2, 3, 4))
             batch_var = sb.permute(1, 0, 2, 3, 4).contiguous().view(c, -1).var(1, unbiased=False)
 
             if self.running_manner:
-                if self.mean_pred[b] is None or self.var_pred[b] is None:
-                    # Initialize lazily if we couldn't at __init__ time
-                    self.mean_pred[b] = torch.zeros_like(tgt_mean)
-                    self.var_pred[b] = torch.zeros_like(tgt_var)
-                mean_use = self.momentum * batch_mean + (1.0 - self.momentum) * self.mean_pred[b].detach()
-                var_use = self.momentum * batch_var + (1.0 - self.momentum) * self.var_pred[b].detach()
-                self.mean_pred[b] = mean_use
-                self.var_pred[b] = var_use
+                # Initialize if necessary
+                if self.mean_pred['LL'] is None or self.var_pred['LL'] is None:
+                    self.mean_pred = {b: torch.zeros_like(tgt_mean) for b in self.bands}
+                    self.var_pred = {b: torch.zeros_like(tgt_var) for b in self.bands}
+                mean_use = self.momentum * batch_mean + (1.0 - self.momentum) * self.mean_pred['LL'].detach()
+                var_use = self.momentum * batch_var + (1.0 - self.momentum) * self.var_pred['LL'].detach()
+                # Store back into a representative key
+                self.mean_pred['LL'] = mean_use
+                self.var_pred['LL'] = var_use
             else:
                 mean_use = batch_mean
                 var_use = batch_var
 
-            reg_b = compute_regularization(tgt_mean, mean_use, tgt_var, var_use, self.reg_type)
-            lam = self.band_lambdas[b]
-            self.r_feature = self.r_feature + lam * reg_b
-            self.r_feature_bands[b] = lam * reg_b
+            reg = compute_regularization(tgt_mean, mean_use, tgt_var, var_use, self.reg_type)
+            lam_total = sum([self.band_lambdas.get(b, 0.0) for b in self.bands])
+            if lam_total == 0.0:
+                lam_total = 1.0
+            self.r_feature = self.r_feature + lam_total * reg
+            # Leave per-band map as zeros in combined mode
+        else:
+            # Per-band computation similar to BNFeatureHook but on transformed subbands
+            for b in self.bands:
+                if self.band_lambdas.get(b, 0.0) <= 0:
+                    continue
+                sb_list = [t for t in grouped[b] if t is not None]
+                if len(sb_list) == 0:
+                    continue
+                sb = torch.cat(sb_list, dim=0)  # (N*, C, T', H', W')
+                c = sb.shape[1]
+                batch_mean = sb.mean(dim=(0, 2, 3, 4))
+                batch_var = sb.permute(1, 0, 2, 3, 4).contiguous().view(c, -1).var(1, unbiased=False)
+
+                if self.running_manner:
+                    if self.mean_pred[b] is None or self.var_pred[b] is None:
+                        # Initialize lazily if we couldn't at __init__ time
+                        self.mean_pred[b] = torch.zeros_like(tgt_mean)
+                        self.var_pred[b] = torch.zeros_like(tgt_var)
+                    mean_use = self.momentum * batch_mean + (1.0 - self.momentum) * self.mean_pred[b].detach()
+                    var_use = self.momentum * batch_var + (1.0 - self.momentum) * self.var_pred[b].detach()
+                    self.mean_pred[b] = mean_use
+                    self.var_pred[b] = var_use
+                else:
+                    mean_use = batch_mean
+                    var_use = batch_var
+
+                reg_b = compute_regularization(tgt_mean, mean_use, tgt_var, var_use, self.reg_type)
+                lam = self.band_lambdas[b]
+                self.r_feature = self.r_feature + lam * reg_b
+                self.r_feature_bands[b] = lam * reg_b
 
     def add_hook_back(self, module):
         self.hook = module.register_forward_hook(self.hook_fn)

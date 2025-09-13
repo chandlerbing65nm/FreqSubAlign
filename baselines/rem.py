@@ -9,14 +9,19 @@ import baselines.tent as tent
 
 def _ensure_ncthw(x: torch.Tensor, arch: Optional[str]) -> Tuple[torch.Tensor, Optional[Tuple[int, ...]]]:
     """
-    Ensure input is in N, C, T, H, W format.
+    Ensure input is in N, C, T, H, W format for masking when needed.
     Returns the possibly-permuted tensor and a tuple describing how to invert for TANet.
+
+    Notes:
+    - TANet path in validate() provides input as N, T, C, H, W; we permute to N, C, T, H, W for masking.
+    - VideoSwin path provides input as N, V, C, T, H, W; we leave as-is and handle 6D masking downstream.
+    - If already N, C, T, H, W, we return as-is.
     """
     # TANet adaptation path uses N, T, C, H, W
     if arch == 'tanet' and x.ndim == 5 and x.shape[2] in (3,):
         # Likely already N, T, C, H, W
         return x.permute(0, 2, 1, 3, 4).contiguous(), (0, 2, 1, 3, 4)  # to N,C,T,H,W and remember inverse
-    # Non-TANet path in validate uses N, C, T, H, W already
+    # VideoSwin uses N, V, C, T, H, W; leave unchanged
     return x, None
 
 
@@ -27,14 +32,33 @@ def _invert_to_tanet(x_ncthw: torch.Tensor, inv_perm: Optional[Tuple[int, ...]])
     return x_ncthw.permute(inv_perm).contiguous()
 
 
-def _apply_spatial_mask(x_ncthw: torch.Tensor, ratio: float) -> torch.Tensor:
-    """Apply a random spatial mask shared across channels and time: mask shape [N,1,1,H,W]."""
+def _apply_spatial_mask(x: torch.Tensor, ratio: float) -> torch.Tensor:
+    """
+    Apply a random spatial mask shared across channels and time.
+
+    Supports:
+    - 5D: [N, C, T, H, W] -> mask shape [N, 1, 1, H, W]
+    - 6D: [N, V, C, T, H, W] -> mask shape [N, 1, 1, 1, H, W] (shared across views)
+    """
     if ratio <= 0:
-        return x_ncthw
-    N, C, T, H, W = x_ncthw.shape
+        return x
     keep_prob = 1.0 - ratio
-    mask = torch.bernoulli(torch.full((N, 1, 1, H, W), keep_prob, device=x_ncthw.device, dtype=x_ncthw.dtype))
-    return x_ncthw * mask
+    if x.ndim == 5:
+        N, C, T, H, W = x.shape
+        mask = torch.bernoulli(
+            torch.full((N, 1, 1, H, W), keep_prob, device=x.device, dtype=x.dtype)
+        )
+        return x * mask
+    elif x.ndim == 6:
+        N, V, C, T, H, W = x.shape
+        # Share mask across views to mimic attention-based token drop consistently per sample
+        mask = torch.bernoulli(
+            torch.full((N, 1, 1, 1, H, W), keep_prob, device=x.device, dtype=x.dtype)
+        )
+        return x * mask
+    else:
+        # Unsupported rank: return unmodified
+        return x
 
 
 def _cross_entropy_soft(student_logits: torch.Tensor, target_probs: torch.Tensor) -> torch.Tensor:
@@ -58,15 +82,21 @@ def forward_and_adapt(x: torch.Tensor, model, optimizer, args=None, actual_bz: O
     """
     arch = getattr(args, 'arch', None)
 
-    # Ensure shapes for masking
-    x_ncthw, inv_perm = _ensure_ncthw(x, arch)
+    # Ensure shapes for masking (permute TANet to N,C,T,H,W; leave VideoSwin/others unchanged)
+    x_for_mask, inv_perm = _ensure_ncthw(x, arch)
 
-    # Create masked variants
-    ratios = [0.0, 0.05, 0.10]
-    xs = [ _apply_spatial_mask(x_ncthw, r) for r in ratios ]
+    # Create masked variants at multiple ratios
+    # Use gentler masking for TANet to avoid excessive input corruption
+    ratios = [0.0, 0.02, 0.05] if arch == 'tanet' else [0.0, 0.05, 0.10]
+    xs = [_apply_spatial_mask(x_for_mask, r) for r in ratios]
 
     # Convert back to model-required shapes per arch
-    xs_model = [ _invert_to_tanet(t, inv_perm) for t in xs ]
+    xs_model = []
+    for t in xs:
+        if arch == 'tanet':
+            xs_model.append(_invert_to_tanet(t, inv_perm))
+        else:
+            xs_model.append(t)
 
     # Forward passes
     logits_list = []
@@ -114,6 +144,12 @@ def forward_and_adapt(x: torch.Tensor, model, optimizer, args=None, actual_bz: O
     loss = mcl + lam * erl
 
     loss.backward()
+    # Gradient clipping to stabilize TANet updates
+    try:
+        for group in optimizer.param_groups:
+            torch.nn.utils.clip_grad_norm_(group['params'], max_norm=1.0)
+    except Exception:
+        pass
     optimizer.step()
     optimizer.zero_grad()
 

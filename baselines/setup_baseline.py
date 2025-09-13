@@ -57,7 +57,21 @@ def setup_rem(args, model, logger):
     """
     model = rem.configure_model(model)
     params, param_names = rem.collect_params(model)
-    optimizer = optim.SGD(params, lr=1e-3)
+    # Match official REM's BN behavior for CNNs (use batch stats without accumulating)
+    try:
+        import torch
+        for m in model.modules():
+            if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+                m.track_running_stats = False
+                m.running_mean = None
+                m.running_var = None
+    except Exception:
+        pass
+    # Use a conservative optimizer for TANet to avoid catastrophic BN drift
+    if getattr(args, 'arch', '') == 'tanet':
+        optimizer = optim.Adam(params, lr=tent_args.LR, betas=(tent_args.BETA, 0.999), weight_decay=tent_args.WD)
+    else:
+        optimizer = optim.SGD(params, lr=1e-3)
     if args.verbose:
         # logger.debug(f"model for adaptation: %s", model)
         logger.debug(f"params for adaptation: %s", param_names)
